@@ -1,4 +1,5 @@
 const Vendor = require('../models/Vendor');
+const Menu = require('../models/Menu');
 const VendorHours = require('../models/VendorHours');
 const VendorLocation = require('../models/VendorLocation');
 const PasswordOtp = require('../models/PasswordOtp');
@@ -18,6 +19,18 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
     const exists = await Vendor.findOne({ email });
     if (exists) return res.status(409).json({ error: 'Email already registered' });
 
+    const passwordHash = await passwordService.hashPassword(password);
+
+    const vendor = await Vendor.create({
+      name,
+      email,
+      phone,
+      vendor_type,
+      passwordHash,
+      provider: "email",
+      verified: false
+    });
+
     const otp = generateOtp(4);
     const expires_at = Date.now() + 10 * 60 * 1000;
 
@@ -35,7 +48,11 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
       `Your OTP is ${otp}`
     );
 
-    return res.json({ success: true, message: "OTP sent to email" });
+    return res.json({
+      success: true,
+      message: "OTP sent to email",
+      vendor_id: vendor._id
+    });
 
   } catch (err) {
     console.error('Vendor register error', err);
@@ -47,31 +64,24 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
   }
 };
 
-exports.vendorSignupVerifyAndRegister = async (req, res, next) => {
+exports.vendorSignupVerify = async (req, res, next) => {
   try {
-    const { name, email, password, phone, vendor_type, otp } = req.body;
+    const { email, otp } = req.body;
 
-    const exists = await Vendor.findOne({ email });
-    if (exists) return res.status(409).json({ error: 'Email already registered' });
+    const vendor = await Vendor.findOne({ email });
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+
+    if (vendor.verified === true)
+      return res.status(400).json({ error: "Already verified" });
 
     const doc = await PasswordOtp.findOne({ email });
-    console.log(doc.otp);
-    console.log(String(otp));
 
     if (!doc) return res.status(400).json({ error: 'Invalid OTP' });
     if (doc.expires_at < Date.now()) return res.status(400).json({ error: 'OTP expired' });
     if (doc.otp !== String(doc.otp)) return res.status(400).json({ error: 'Incorrect OTP' });
 
-    const passwordHash = await passwordService.hashPassword(password);
-
-    const vendor = await Vendor.create({
-      name,
-      email,
-      phone,
-      vendor_type,
-      passwordHash,
-      provider: 'email'
-    });
+    vendor.verified = true;
+    await vendor.save();
 
     await PasswordOtp.deleteOne({ email });
 
@@ -79,20 +89,21 @@ exports.vendorSignupVerifyAndRegister = async (req, res, next) => {
     const accessToken = jwtService.signAccess(payload);
     const refreshToken = jwtService.signRefresh(payload);
 
-    return res.status(201).json({
+    return res.json({
+      success: true,
       vendor: {
-        id: vendor._id.toString(),
+        id: vendor._id,
         name: vendor.name,
         email: vendor.email,
         phone: vendor.phone,
         vendor_type: vendor.vendor_type,
         provider: vendor.provider,
-        createdAt: vendor.createdAt
+        verified: vendor.verified
       },
       tokens: {
         accessToken,
         refreshToken,
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m'
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN
       }
     });
   } catch (err) {
@@ -642,3 +653,25 @@ exports.getLanguage = async (req, res, next) => {
   }
 };
 
+//delete account
+exports.deleteAccount = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+
+    await Promise.all([
+      Vendor.deleteOne({ _id: vendorId }),
+      Menu.deleteMany({ vendor_id: vendorId }),
+      VendorHours.deleteMany({ vendor_id: vendorId }),
+      VendorLocation.deleteMany({ vendor_id: vendorId })
+    ]);
+
+    return res.json({ success: true, message: "Account deleted" });
+  } catch (err) {
+    console.error("Delete vendor Account Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};

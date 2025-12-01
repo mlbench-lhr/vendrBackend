@@ -20,7 +20,7 @@ router.post('/user/logout', userController.logout);
 
 // vendor auth
 router.post('/vendor/signup-otp', validateBody(schemas.vendorRegisterSchema), vendorController.vendorSignupRequestOtp);
-router.post('/vendor/signup', validateBody(schemas.vendorRegisterSchema), vendorController.vendorSignupVerifyAndRegister);
+router.post('/vendor/signup', validateBody(schemas.verifyOtpSchema), vendorController.vendorSignupVerify);
 router.post('/vendor/login', validateBody(schemas.vendorLoginSchema), vendorController.login);
 router.post('/vendor/oauth', validateBody(schemas.vendorOauthSchema), vendorController.oauth);
 router.post('/vendor/logout', vendorController.logout);
@@ -58,6 +58,9 @@ router.get('/vendor/location', auth, vendorController.getLocation);
 // vendor language
 router.put('/vendor/language', auth, validateBody(schemas.vendorLanguageSchema), vendorController.setLanguage);
 router.get('/vendor/language', auth, vendorController.getLanguage);
+
+//delete vendor account
+router.delete('/vendor/delete-account', auth, vendorController.deleteAccount);
 
 // password reset
 router.post('/forgot-password', validateBody(schemas.forgotPasswordSchema), passwordController.forgotPassword);

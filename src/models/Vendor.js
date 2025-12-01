@@ -22,7 +22,7 @@ const VendorSchema = new Schema(
       type: String,
       required: false, // OAuth vendors will not have a password
     },
-
+    verified: { type: Boolean, default: false },
     phone: {
       type: String,
       required: false, // required only for email registration (controller handles this)
