@@ -29,11 +29,12 @@ exports.forgotPassword = async (req, res, next) => {
       { upsert: true, new: true }
     );
     const otpEmailTemplate = require('../emails/templates/otpEmail');
+    const subject = "Password Reset OTP";
 
     await sendEmail(
       email,
       "Password Reset OTP",
-      otpEmailTemplate({ otp }),
+      otpEmailTemplate({ otp, subject }),
       `Your OTP is ${otp}`
     );
     return res.json({ success: true, message: 'OTP sent to email' });
@@ -65,3 +66,62 @@ exports.resetPassword = async (req, res, next) => {
     return res.json({ success: true, message: 'Password updated', user: user || vendor });
   } catch (err) { next(err); }
 };
+
+exports.changePassword = async (req, res, next) => {
+  try {
+    const { old_password, new_password } = req.body;
+    const userId = req.user.id;
+
+    // Try user first
+    let account = await User.findById(userId);
+    let accountType = "user";
+    if (!account) {
+      account = await Vendor.findById(userId);
+      accountType = "vendor";
+    }
+
+    if (!account) {
+      return res.status(404).json({ success: false, message: "Account not found" });
+    }
+
+    // CASE 1: OAuth user (no password exists)
+    if (!account.passwordHash) {
+      const newHash = await passwordService.hashPassword(new_password);
+
+      if (accountType === "user") {
+        await User.findByIdAndUpdate(userId, { passwordHash: newHash });
+      } else {
+        await Vendor.findByIdAndUpdate(userId, { passwordHash: newHash });
+      }
+
+      return res.json({
+        success: true,
+        message: "Password set successfully"
+      });
+    }
+
+    // CASE 2: Normal user (must validate old password)
+    const isCorrect = await passwordService.comparePassword(old_password, account.passwordHash);
+    if (!isCorrect) {
+      return res.status(400).json({ success: false, message: "Old password is empty or incorrect" });
+    }
+
+    // Hash and update
+    const newHash = await passwordService.hashPassword(new_password);
+
+    if (accountType === "user") {
+      await User.findByIdAndUpdate(userId, { passwordHash: newHash });
+    } else {
+      await Vendor.findByIdAndUpdate(userId, { passwordHash: newHash });
+    }
+
+    return res.json({
+      success: true,
+      message: "Password successfully updated"
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+

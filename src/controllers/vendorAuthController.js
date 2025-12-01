@@ -1,10 +1,16 @@
 const Vendor = require('../models/Vendor');
+const VendorHours = require('../models/VendorHours');
+const VendorLocation = require('../models/VendorLocation');
+const PasswordOtp = require('../models/PasswordOtp');
 const passwordService = require('../services/passwordService');
 const jwtService = require('../services/jwtService');
 const logger = require('../utils/logger');
+const cloudinary = require('../config/cloudinary');
+const { generateOtp } = require('../services/passwordService');
+const { sendEmail } = require('../emails/sendEmail');
 
 // EMAIL REGISTRATION
-exports.register = async (req, res, next) => {
+exports.vendorSignupRequestOtp = async (req, res, next) => {
   try {
     const { name, email, password, phone, vendor_type } = req.body;
 
@@ -12,7 +18,50 @@ exports.register = async (req, res, next) => {
     const exists = await Vendor.findOne({ email });
     if (exists) return res.status(409).json({ error: 'Email already registered' });
 
-    // Hash password
+    const otp = generateOtp(4);
+    const expires_at = Date.now() + 10 * 60 * 1000;
+
+    await PasswordOtp.findOneAndUpdate(
+      { email },
+      { email, otp, expires_at },
+      { upsert: true }
+    );
+
+    const otpEmailTemplate = require('../emails/templates/otpEmail');
+    await sendEmail(
+      email,
+      "Signup Verification OTP",
+      otpEmailTemplate({ otp, subject: "Verify Your Email" }),
+      `Your OTP is ${otp}`
+    );
+
+    return res.json({ success: true, message: "OTP sent to email" });
+
+  } catch (err) {
+    console.error('Vendor register error', err);
+    return res.status(500).json({
+      success: false,
+      message: "Vendor sign up failed",
+      error: err.message
+    });
+  }
+};
+
+exports.vendorSignupVerifyAndRegister = async (req, res, next) => {
+  try {
+    const { name, email, password, phone, vendor_type, otp } = req.body;
+
+    const exists = await Vendor.findOne({ email });
+    if (exists) return res.status(409).json({ error: 'Email already registered' });
+
+    const doc = await PasswordOtp.findOne({ email });
+    console.log(doc.otp);
+    console.log(String(otp));
+
+    if (!doc) return res.status(400).json({ error: 'Invalid OTP' });
+    if (doc.expires_at < Date.now()) return res.status(400).json({ error: 'OTP expired' });
+    if (doc.otp !== String(doc.otp)) return res.status(400).json({ error: 'Incorrect OTP' });
+
     const passwordHash = await passwordService.hashPassword(password);
 
     const vendor = await Vendor.create({
@@ -24,8 +73,9 @@ exports.register = async (req, res, next) => {
       provider: 'email'
     });
 
-    const payload = { id: vendor._id.toString(), email: vendor.email, role: 'vendor' };
+    await PasswordOtp.deleteOne({ email });
 
+    const payload = { id: vendor._id.toString(), email: vendor.email, role: 'vendor' };
     const accessToken = jwtService.signAccess(payload);
     const refreshToken = jwtService.signRefresh(payload);
 
@@ -46,10 +96,15 @@ exports.register = async (req, res, next) => {
       }
     });
   } catch (err) {
-    logger.error('Vendor register error', err);
-    next(err);
+    console.error('Vendor register error', err);
+    return res.status(500).json({
+      success: false,
+      message: "Vendor otp verification and sign up failed",
+      error: err.message
+    });
   }
 };
+
 
 // EMAIL LOGIN
 exports.login = async (req, res, next) => {
@@ -183,3 +238,407 @@ exports.refresh = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.editProfile = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { name, vendor_type, shop_address } = req.body;
+
+    let updateData = { name, vendor_type, shop_address };
+
+    // Fetch vendor to get old image public_id
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found"
+      });
+    }
+
+    // If new image is uploaded
+    if (req.file) {
+      try {
+        // 1️⃣ Delete old image if exists
+        if (vendor.profile_image_public_id) {
+          await cloudinary.uploader.destroy(vendor.profile_image_public_id);
+        }
+
+        // 2️⃣ Upload new image
+        const uploadedImage = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { folder: "vendors/profile_images" },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          stream.end(req.file.buffer);
+        });
+
+        updateData.profile_image = uploadedImage.secure_url;
+        updateData.profile_image_public_id = uploadedImage.public_id;
+
+      } catch (cloudErr) {
+        return res.status(500).json({
+          success: false,
+          message: "Image upload failed",
+          error: cloudErr.message
+        });
+      }
+    }
+
+    // Update vendor record
+    const updatedVendor = await Vendor.findByIdAndUpdate(
+      vendorId,
+      updateData,
+      { new: true }
+    );
+
+    return res.json({
+      success: true,
+      message: "Profile updated successfully",
+      vendor: updatedVendor
+    });
+
+  } catch (err) {
+    console.error("Edit Profile Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+// Step 1: Vendor requests OTP to old phone
+exports.requestPhoneOtp = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { phone } = req.body;
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+    // Old phone must match
+    if (vendor.phone !== phone)
+      return res.status(400).json({ error: 'Old phone number incorrect' });
+
+    // Generate OTP
+    const otp = generateOtp(4);
+    const expires_at = Date.now() + 10 * 60 * 1000; // 10 min
+
+    // Store OTP (reuse PasswordOtp collection)
+    await PasswordOtp.findOneAndUpdate(
+      { email: vendor.email },
+      { email: vendor.email, otp, expires_at },
+      { upsert: true }
+    );
+
+    // Send SMS
+    await sendSms(phone, `Your phone change OTP is: ${otp}`);
+
+    return res.json({
+      success: true,
+      message: 'OTP sent to your phone number'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Step 2: Vendor verifies OTP
+exports.verifyPhoneOtp = async (req, res, next) => {
+  try {
+    const vendorId = req.user.userId;
+    const { phone, otp } = req.body;
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+    // Must match old phone
+    if (vendor.phone !== phone)
+      return res.status(400).json({ error: 'Old phone incorrect' });
+
+    const doc = await PasswordOtp.findOne({ email: vendor.email });
+    if (!doc) return res.status(400).json({ error: 'OTP invalid' });
+
+    if (doc.expires_at < Date.now())
+      return res.status(400).json({ error: 'OTP expired' });
+
+    if (doc.otp !== otp)
+      return res.status(400).json({ error: 'OTP incorrect' });
+
+    return res.json({
+      success: true,
+      message: 'OTP verified successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Step 3: Vendor updates phone number
+exports.updatePhone = async (req, res, next) => {
+  try {
+    const vendorId = req.user.userId;
+    const { new_phone } = req.body;
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+    // Ensure new phone isn't used by another vendor
+    const exists = await Vendor.findOne({ phone: new_phone });
+    if (exists)
+      return res.status(409).json({ error: 'Phone already in use' });
+
+    vendor.phone = new_phone;
+    await vendor.save();
+
+    // Remove OTP record
+    await PasswordOtp.deleteOne({ email: vendor.email });
+
+    return res.json({
+      success: true,
+      message: 'Phone updated successfully',
+      phone: vendor.phone
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Step 1: Request OTP to old email
+exports.requestEmailOtp = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { email } = req.body;
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+    if (vendor.email !== email)
+      return res.status(400).json({ error: 'Old email incorrect' });
+
+    const otp = generateOtp(4);
+    const expires_at = Date.now() + 10 * 60 * 1000;
+
+    await PasswordOtp.findOneAndUpdate(
+      { email },
+      { email, otp, expires_at },
+      { upsert: true }
+    );
+
+    const otpEmailTemplate = require('../emails/templates/otpEmail');
+    const subject = "Email Change OTP"
+    await sendEmail(
+      email,
+      "Email Change OTP",
+      otpEmailTemplate({ otp, subject }),
+      `Your OTP is ${otp}`
+    );
+
+    return res.json({ success: true, message: 'OTP sent to your email' });
+  } catch (err) {
+    console.error("Change Email Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+// Step 2: Verify OTP for old email
+exports.verifyEmailOtp = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { email, otp } = req.body;
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+    if (vendor.email !== email)
+      return res.status(400).json({ error: 'Old email incorrect' });
+
+    const doc = await PasswordOtp.findOne({ email });
+    if (!doc) return res.status(400).json({ error: 'OTP invalid' });
+    if (doc.expires_at < Date.now()) return res.status(400).json({ error: 'OTP expired' });
+    if (doc.otp !== String(otp)) return res.status(400).json({ error: 'OTP incorrect' });
+
+    return res.json({ success: true, message: 'OTP verified successfully' });
+  } catch (err) {
+    console.error("Change Email Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+// Step 3: Update email after OTP verification
+exports.updateEmail = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { new_email } = req.body;
+
+    const vendor = await Vendor.findById(vendorId);
+    const oldEmail = vendor.email;
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+    const exists = await Vendor.findOne({ email: new_email });
+    if (exists) return res.status(409).json({ error: 'Email already in use' });
+
+    vendor.email = new_email;
+    await vendor.save();
+
+    await PasswordOtp.deleteOne({ email: oldEmail });
+    return res.json({
+      success: true,
+      message: 'Email updated successfully',
+      email: vendor.email
+    });
+  } catch (err) {
+    console.error("Change Email Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+//set vendor hours
+exports.setVendorHours = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { days } = req.body;
+
+    const updated = await VendorHours.findOneAndUpdate(
+      { vendor_id: vendorId },
+      { vendor_id: vendorId, days, updated_at: Date.now() },
+      { upsert: true, new: true }
+    );
+
+    return res.json({ success: true, hours: updated });
+  } catch (err) {
+    console.error("Set vendor hours Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+//get vendor hours
+exports.getVendorHours = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+
+    const hours = await VendorHours.findOne({ vendor_id: vendorId });
+    return res.json({ success: true, hours });
+  } catch (err) {
+    console.error("Get vendor hours Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+//set location
+exports.setLocation = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { mode, fixed_location, remote_locations } = req.body;
+
+    const update = {
+      vendor_id: vendorId,
+      mode,
+      updated_at: Date.now()
+    };
+
+    if (mode === 'fixed') {
+      update.fixed_location = fixed_location;
+      update.remote_locations = [];
+    }
+
+    if (mode === 'remote') {
+      update.fixed_location = null;
+      update.remote_locations = remote_locations;
+    }
+
+    const result = await VendorLocation.findOneAndUpdate(
+      { vendor_id: vendorId },
+      update,
+      { upsert: true, new: true }
+    );
+
+    return res.json({ success: true, location: result });
+  } catch (err) {
+    console.error("Set vendor Location Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+//get location
+exports.getLocation = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const loc = await VendorLocation.findOne({ vendor_id: vendorId });
+    return res.json({ success: true, location: loc });
+  } catch (err) {
+    console.error("Get vendor Location Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+//set language
+exports.setLanguage = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { language } = req.body;
+
+    const updated = await Vendor.findByIdAndUpdate(
+      vendorId,
+      { language },
+      { new: true }
+    );
+
+    return res.json({ success: true, language: updated.language });
+  } catch (err) {
+    console.error("Set vendor Language Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+
+// get language
+exports.getLanguage = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const vendor = await Vendor.findById(vendorId).select("language");
+    return res.json({ success: true, language: vendor.language });
+  } catch (err) {
+    console.error("Get vendor Language Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message
+    });
+  }
+};
+

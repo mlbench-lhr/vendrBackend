@@ -1,4 +1,4 @@
-module.exports = function otpEmailTemplate({ otp }) {
+module.exports = function otpEmailTemplate({ otp, subject }) {
 
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -8,11 +8,11 @@ module.exports = function otpEmailTemplate({ otp }) {
       </div>
 
       <h2 style="text-align:center; color:#266CA8; margin-top: 20px;">
-        Password Reset Request
+        ${subject}
       </h2>
 
       <p style="font-size: 16px; color:#444;">
-        You requested a password reset for your Vender mobile application account.
+        You requested a OTP for your Vender mobile application account.
       </p>
 
       <p style="font-size: 16px;">Your OTP code is:</p>
