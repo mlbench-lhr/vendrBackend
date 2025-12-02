@@ -195,5 +195,8 @@ exports.vendorLanguageSchema = () => Joi.object({
   ).required()
 });
 
+exports.resendOtpSchema = () => Joi.object({
+  email: Joi.string().email().required()
+});
 
 

@@ -17,7 +17,7 @@ const UserSchema = new Schema(
       type: String,
       required: false, // OAuth users do NOT have a password
     },
-
+    verified: { type: Boolean, default: false },
     provider: {
       type: String,
       enum: ['email', 'google', 'apple'],

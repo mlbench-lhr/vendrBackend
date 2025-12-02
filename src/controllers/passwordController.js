@@ -125,3 +125,39 @@ exports.changePassword = async (req, res, next) => {
   }
 };
 
+exports.resendOtp = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    const vendor = await Vendor.findOne({ email });
+
+    if (!user && !vendor) {
+      return res.status(404).json({ success: false, message: "Email not registered" });
+    }
+
+    const otp = generateOtp(4);
+    const expires_at = Date.now() + OTP_TTL;
+
+    await PasswordOtp.findOneAndUpdate(
+      { email },
+      { email, otp, expires_at },
+      { upsert: true, new: true }
+    );
+
+    const otpEmailTemplate = require('../emails/templates/otpEmail');
+    const subject = "Your OTP Code";
+
+    await sendEmail(
+      email,
+      subject,
+      otpEmailTemplate({ otp, subject }),
+      `Your OTP is ${otp}`
+    );
+
+    return res.json({ success: true, message: "OTP resent to email" });
+
+  } catch (err) {
+    next(err);
+  }
+};

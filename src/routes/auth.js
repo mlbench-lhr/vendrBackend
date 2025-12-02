@@ -12,7 +12,8 @@ const validateBody = require('../middleware/validate');
 const schemas = require('../middleware/validators'); // correct file name
 
 // user auth
-router.post('/user/register', validateBody(schemas.userRegisterSchema), userController.register);
+router.post('/user/signup-otp', validateBody(schemas.userRegisterSchema), userController.userSignupRequestOtp);
+router.post('/user/signup', validateBody(schemas.verifyOtpSchema), userController.userSignupVerify);
 router.post('/user/login', validateBody(schemas.userLoginSchema), userController.login);
 router.post('/user/oauth', validateBody(schemas.userOauthSchema), userController.oauth);
 router.post('/user/refresh', userController.refresh);
@@ -36,6 +37,7 @@ router.put('/vendor/change-phone/update', auth, validateBody(schemas.vendorUpdat
 
 //vendor change password request
 router.post('/change-password', auth, validateBody(schemas.changePasswordSchema), passwordController.changePassword);
+router.post('/resend-otp', validateBody(schemas.resendOtpSchema), passwordController.resendOtp);
 
 //vendor change email request
 router.post('/vendor/change-email/request', auth, validateBody(schemas.vendorRequestEmailOtpSchema), vendorController.requestEmailOtp);

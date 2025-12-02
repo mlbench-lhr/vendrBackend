@@ -1,19 +1,21 @@
 const User = require('../models/User');
+const PasswordOtp = require('../models/PasswordOtp');
 const passwordService = require('../services/passwordService');
 const jwtService = require('../services/jwtService');
 const logger = require('../utils/logger');
-
+const { generateOtp } = require('../services/passwordService');
+const { sendEmail } = require('../emails/sendEmail');
 /*
 |--------------------------------------------------------------------------
 | USER REGISTER
 |--------------------------------------------------------------------------
 */
-async function register(req, res, next) {
+async function userSignupRequestOtp(req, res, next) {
   try {
     const { name, email, password } = req.body;
 
-    const existing = await User.findOne({ email });
-    if (existing) return res.status(409).json({ error: 'Email already registered' });
+    const existing = await User.findOne({ email, deleted: false });
+    if (existing) return res.status(409).json({ error: "Email already registered" });
 
     const passwordHash = await passwordService.hashPassword(password);
 
@@ -21,30 +23,91 @@ async function register(req, res, next) {
       name,
       email,
       passwordHash,
-      provider: 'email'
+      provider: "email",
+      verified: false
     });
 
-    const payload = { id: user._id.toString(), email: user.email, role: 'user' };
+    const otp = generateOtp(4);
+    const expires_at = Date.now() + 10 * 60 * 1000;
 
-    return res.status(201).json({
+    await PasswordOtp.findOneAndUpdate(
+      { email },
+      { email, otp, expires_at },
+      { upsert: true }
+    );
+
+    const otpEmailTemplate = require("../emails/templates/otpEmail");
+
+    await sendEmail(
+      email,
+      "Signup Verification OTP",
+      otpEmailTemplate({ otp, subject: "Verify Your Email" }),
+      `Your OTP is ${otp}`
+    );
+
+    return res.json({
+      success: true,
+      message: "OTP sent to email",
+      user_id: user._id
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "User signup request failed",
+      error: err.message
+    });
+  }
+};
+
+async function userSignupVerify(req, res, next) {
+  try {
+    const { email, otp } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.verified) return res.status(400).json({ error: "Already verified" });
+
+    const doc = await PasswordOtp.findOne({ email });
+    if (!doc) return res.status(400).json({ error: "Invalid OTP" });
+    if (doc.expires_at < Date.now()) return res.status(400).json({ error: "OTP expired" });
+    if (String(doc.otp).trim() !== String(otp).trim())
+      return res.status(400).json({ error: "Incorrect OTP" });
+
+    user.verified = true;
+    await user.save();
+
+    await PasswordOtp.deleteOne({ email });
+
+    const payload = { id: user._id.toString(), email: user.email, role: "user" };
+    const accessToken = jwtService.signAccess(payload);
+    const refreshToken = jwtService.signRefresh(payload);
+
+    return res.json({
       success: true,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
+        verified: user.verified,
         createdAt: user.createdAt
       },
       tokens: {
-        accessToken: jwtService.signAccess(payload),
-        refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m'
+        accessToken,
+        refreshToken,
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m"
       }
     });
+
   } catch (err) {
-    logger.error('Register error', err);
-    next(err);
+    return res.status(500).json({
+      success: false,
+      message: "OTP verification failed",
+      error: err.message
+    });
   }
-}
+};
+
 
 /*
 |--------------------------------------------------------------------------
@@ -188,4 +251,4 @@ async function logout(req, res, next) {
   }
 }
 
-module.exports = { register, login, oauth, refresh, logout };
+module.exports = { userSignupRequestOtp, userSignupVerify, login, oauth, refresh, logout };
