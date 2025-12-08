@@ -64,7 +64,6 @@ exports.vendorEditProfileSchema = () => Joi.object({
 exports.changePasswordSchema = () => Joi.object({
   old_password: Joi.string().allow(null, ""),
   new_password: Joi.string().min(8).required(),
-  confirm_password: Joi.string().valid(Joi.ref("new_password")).required()
 });
 
 exports.vendorRequestPhoneOtpSchema = () => Joi.object({
