@@ -1,0 +1,301 @@
+const Vendor = require("../models/Vendor");
+const VendorHours = require("../models/VendorHours");
+const VendorLocation = require("../models/VendorLocation");
+const Menu = require("../models/Menu");
+const VendorReview = require("../models/VendorReview");
+const User = require("../models/User");
+const cloudinary = require('../config/cloudinary');
+
+exports.editProfile = async (req, res) => {
+    try {
+        const userId = req.user.id; // from auth middleware
+        const { name, profile_image } = req.body;
+
+        let updateData = {};
+        if (name) updateData.name = name;
+
+        // Only update profile image if provided
+        if (profile_image) {
+            updateData.profile_image = profile_image;
+        }
+
+        // Update user record
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            updateData,
+            { new: true }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Profile updated successfully",
+            user: updatedUser
+        });
+
+    } catch (err) {
+        console.error("Edit Profile Error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message
+        });
+    }
+};
+
+exports.getVendorDetails = async (req, res, next) => {
+    try {
+        const vendorId = req.params.vendorId;
+        const { lat, lng } = req.query; // user location from mobile app
+
+        // 1. Vendor Basic Info
+        const vendor = await Vendor.findById(vendorId).select(
+            "name profile_image vendor_type shop_address"
+        );
+
+        if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
+
+        // 2. Vendor Location
+        const location = await VendorLocation.findOne({ vendor_id: vendorId });
+
+        // 3. Vendor Hours
+        const hours = await VendorHours.findOne({ vendor_id: vendorId });
+
+        // Check open/closed status
+        let open_status = "unknown";
+        if (hours) {
+            const currentDay = new Date().toLocaleString("en-US", { weekday: "long" }).toLowerCase();
+            const d = hours.days[currentDay];
+
+            if (d && d.enabled) open_status = "open";
+            else open_status = "closed";
+        }
+
+        // 4. Vendor Menu
+        const menus = await Menu.find({ vendor_id: vendorId });
+
+        // 5. Vendor Reviews (with user info)
+        let reviews = await VendorReview.find({ vendor_id: vendorId }).sort({ created_at: -1 });
+
+        reviews = await Promise.all(
+            reviews.map(async (r) => {
+                const user = await User.findById(r.user_id).select("name profile_image");
+                return {
+                    rating: r.rating,
+                    message: r.message,
+                    created_at: r.created_at,
+                    user: {
+                        name: user?.name || "Unknown User",
+                        profile_image: user?.profile_image
+                    }
+                };
+            })
+        );
+
+        // 6. Calculate distance from user
+        let distance = null;
+        if (lat && lng && location?.fixed_location) {
+            const R = 6371;
+            const dLat = (location.fixed_location.lat - lat) * (Math.PI / 180);
+            const dLng = (location.fixed_location.lng - lng) * (Math.PI / 180);
+
+            const a =
+                Math.sin(dLat / 2) ** 2 +
+                Math.cos(lat * (Math.PI / 180)) *
+                Math.cos(location.fixed_location.lat * (Math.PI / 180)) *
+                Math.sin(dLng / 2) ** 2;
+
+            distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        return res.json({
+            success: true,
+            vendor,
+            location,
+            distance_in_km: distance ? Number(distance.toFixed(1)) : null,
+            open_status,
+            hours,
+            menus,
+            reviews
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+//set language
+exports.setLanguage = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const { language } = req.body;
+
+        const updated = await User.findByIdAndUpdate(
+            userId,
+            { language },
+            { new: true }
+        );
+
+        return res.json({ success: true, language: updated.language });
+    } catch (err) {
+        console.error("Set User Language Error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message
+        });
+    }
+};
+
+// get language
+exports.getLanguage = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId).select("language");
+        return res.json({ success: true, language: user.language });
+    } catch (err) {
+        console.error("Get User Language Error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message
+        });
+    }
+};
+
+//delete account
+exports.deleteAccount = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        await Promise.all([
+            User.deleteOne({ _id: userId }),
+            VendorReview.updateMany(
+                { user_id: userId },
+                {
+                    $set: { user_id: null }
+                }
+            )
+        ]);
+
+        return res.json({ success: true, message: "Account deleted" });
+    } catch (err) {
+        console.error("Delete vendor Account Error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message
+        });
+    }
+};
+
+exports.getUserProfile = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const user = await User.findById(userId).select(
+            "name email profile_image"
+        );
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        return res.json({ success: true, user });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message
+        });
+    }
+};
+
+exports.getNearbyVendors = async (req, res, next) => {
+    try {
+        const { lat, lng, maxDistance = 5 } = req.query;
+        if (!lat || !lng) return res.status(400).json({ success: false, message: "lat & lng required" });
+
+        const userLat = parseFloat(lat);
+        const userLng = parseFloat(lng);
+
+        // Fetch all vendors with locations
+        const vendorLocations = await VendorLocation.find();
+
+        const vendorsWithDistance = await Promise.all(
+            vendorLocations.map(async (vLoc) => {
+                
+                const vendor = await Vendor.findById(vLoc.vendor_id).select("name profile_image vendor_type shop_address");
+                console.log(`Vendor ${vendor.name}`);
+
+                if (!vendor) return null;
+
+                // Distance calculation (Haversine formula)
+                let distance = null;
+                if (vLoc.fixed_location) {
+                    const R = 6371; // km
+                    const dLat = (vLoc.fixed_location.lat - userLat) * (Math.PI / 180);
+                    const dLng = (vLoc.fixed_location.lng - userLng) * (Math.PI / 180);
+                    const a =
+                        Math.sin(dLat / 2) ** 2 +
+                        Math.cos(userLat * (Math.PI / 180)) *
+                        Math.cos(vLoc.fixed_location.lat * (Math.PI / 180)) *
+                        Math.sin(dLng / 2) ** 2;
+                    distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                }
+
+                // Total menus
+                const totalMenus = await Menu.countDocuments({ vendor_id: vendor._id });
+
+                // Today's enabled hours
+                const hours = await VendorHours.findOne({ vendor_id: vendor._id });
+                const todaysHoursCount = getTodaysHoursCount(hours);
+
+                return {
+                    ...vendor.toObject(),
+                    total_menus: totalMenus,
+                    todays_hours_count: todaysHoursCount,
+                    distance_in_km: distance ? Number(distance.toFixed(1)) : null
+                };
+            })
+        );
+
+        // Filter nearby vendors based on maxDistance
+        const nearbyVendors = vendorsWithDistance
+            .filter(v => v && (v.distance_in_km === null || v.distance_in_km <= maxDistance))
+            .sort((a, b) => (a.distance_in_km || 0) - (b.distance_in_km || 0));
+
+        return res.json({ success: true, count: nearbyVendors.length, vendors: nearbyVendors });
+    } catch (err) {
+        console.error("Get Nearby Vendors Error:", err);
+        return res.status(500).json({ success: false, message: "Something went wrong", error: err.message });
+    }
+};
+
+const getTodaysHoursCount = (hours) => {
+    if (!hours) return 0;
+
+    const currentDay = new Date().toLocaleString("en-US", { weekday: "long" }).toLowerCase();
+    const dayObj = hours.days[currentDay];
+
+    if (!dayObj || !dayObj.enabled) return 0;
+
+    // Parse start and end time
+    const [startH, startM] = dayObj.start.split(":").map(Number);
+    const [endH, endM] = dayObj.end.split(":").map(Number);
+
+    // Convert to minutes
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    // Difference in hours
+    const diffHours = (endMinutes - startMinutes) / 60;
+
+    return diffHours > 0 ? diffHours : 0;
+};
+
+

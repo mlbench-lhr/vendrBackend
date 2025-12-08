@@ -1,40 +1,20 @@
 const cloudinary = require('../config/cloudinary');
 const Menu = require('../models/Menu');
+const Vendor = require('../models/Vendor');
 
 exports.uploadMenu = async (req, res, next) => {
     try {
         const vendorId = req.user.id;
-        const { name, category, description, serving, price } = req.body;
-
-        let images = [];
-
-        if (req.files && req.files.length > 0) {
-            const uploaded = await Promise.all(
-                req.files.map(file => {
-                    return new Promise((resolve, reject) => {
-                        const stream = cloudinary.uploader.upload_stream(
-                            { folder: "vendors/menu" },
-                            (err, result) => err ? reject(err) : resolve(result)
-                        );
-                        stream.end(file.buffer);
-                    });
-                })
-            );
-
-            images = uploaded.map(img => ({
-                url: img.secure_url,
-                public_id: img.public_id
-            }));
-        }
+        const { name, category, description, servings, image_url } = req.body;
+        const servingsArray = Array.isArray(servings) ? servings : [];
 
         const menu = await Menu.create({
             vendor_id: vendorId,
-            images,
+            image_url,
             name,
             category,
             description,
-            serving,
-            price
+            servings: servingsArray
         });
 
         return res.json({ success: true, message: "Menu uploaded successfully", menu });
@@ -52,43 +32,15 @@ exports.editMenu = async (req, res, next) => {
     try {
         const vendorId = req.user.id;
         const { id } = req.params;
-        const { name, description, serving, price } = req.body;
+        const { name, description, servings, image_url } = req.body;
 
         const menu = await Menu.findOne({ _id: id, vendor_id: vendorId });
         if (!menu) return res.status(404).json({ error: "Menu item not found" });
 
-        let newImages = menu.images;
-
-        if (req.files && req.files.length > 0) {
-            await Promise.all(
-                menu.images.map(img =>
-                    cloudinary.uploader.destroy(img.public_id)
-                )
-            );
-
-            const uploaded = await Promise.all(
-                req.files.map(file => {
-                    return new Promise((resolve, reject) => {
-                        const stream = cloudinary.uploader.upload_stream(
-                            { folder: "vendors/menu" },
-                            (err, result) => err ? reject(err) : resolve(result)
-                        );
-                        stream.end(file.buffer);
-                    });
-                })
-            );
-
-            newImages = uploaded.map(img => ({
-                url: img.secure_url,
-                public_id: img.public_id
-            }));
-        }
-
         menu.name = name;
         menu.description = description;
-        menu.serving = serving;
-        menu.price = price;
-        menu.images = newImages;
+        menu.servings = Array.isArray(servings) ? servings : [];
+        menu.image_url = image_url;
 
         await menu.save();
 
@@ -118,3 +70,38 @@ exports.listMenus = async (req, res, next) => {
     }
 };
 
+exports.getMenusByVendor = async (req, res) => {
+    try {
+        const { vendor_id } = req.params;
+
+        // Fetch vendor basic info
+        const vendor = await Vendor.findById(vendor_id).select(
+            "name profile_image vendor_type shop_address"
+        );
+
+        if (!vendor) {
+            return res.status(404).json({ message: "Vendor not found" });
+        }
+
+        // Fetch vendor menus
+        const menus = await Menu.find({ vendor_id })
+            .select("name images price category description serving")
+            .sort({ created_at: -1 });
+
+        return res.json({
+            vendor: {
+                vendor_id: vendor._id,
+                name: vendor.name,
+                vendor_type: vendor.vendor_type,
+                profile_image: vendor.profile_image,
+                shop_address: vendor.shop_address
+            },
+            totalMenus: menus.length,
+            menus
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ message: "Server error" });
+    }
+};

@@ -44,7 +44,7 @@ exports.forgotPassword = async (req, res, next) => {
 exports.verifyOtp = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
-    const doc = await PasswordOtp.findOne({ email });
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });;
     if (!doc) return res.status(400).json({ success: false, message: 'Invalid OTP' });
     if (doc.expires_at < Date.now()) return res.status(400).json({ success: false, message: 'OTP expired' });
     if (doc.otp !== String(otp)) return res.status(400).json({ success: false, message: 'Invalid OTP' });
@@ -55,7 +55,7 @@ exports.verifyOtp = async (req, res, next) => {
 exports.resetPassword = async (req, res, next) => {
   try {
     const { email, otp, new_password } = req.body;
-    const doc = await PasswordOtp.findOne({ email });
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });
     if (!doc || doc.otp !== String(otp) || doc.expires_at < Date.now()) {
       return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
     }
@@ -71,13 +71,14 @@ exports.changePassword = async (req, res, next) => {
   try {
     const { old_password, new_password } = req.body;
     const userId = req.user.id;
+    const role = req.user.role;
 
     // Try user first
-    let account = await User.findById(userId);
-    let accountType = "user";
-    if (!account) {
+    let account;
+    if (role === "user") {
+      account = await User.findById(userId);
+    } else if (role === "vendor") {
       account = await Vendor.findById(userId);
-      accountType = "vendor";
     }
 
     if (!account) {
@@ -88,7 +89,7 @@ exports.changePassword = async (req, res, next) => {
     if (!account.passwordHash) {
       const newHash = await passwordService.hashPassword(new_password);
 
-      if (accountType === "user") {
+      if (role === "user") {
         await User.findByIdAndUpdate(userId, { passwordHash: newHash });
       } else {
         await Vendor.findByIdAndUpdate(userId, { passwordHash: newHash });
@@ -109,7 +110,7 @@ exports.changePassword = async (req, res, next) => {
     // Hash and update
     const newHash = await passwordService.hashPassword(new_password);
 
-    if (accountType === "user") {
+    if (role === "user") {
       await User.findByIdAndUpdate(userId, { passwordHash: newHash });
     } else {
       await Vendor.findByIdAndUpdate(userId, { passwordHash: newHash });

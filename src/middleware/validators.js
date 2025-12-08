@@ -35,11 +35,7 @@ exports.vendorLoginSchema = () => Joi.object({
 
 exports.vendorOauthSchema = () => Joi.object({
   provider: Joi.string().required(),
-  provider_id: Joi.string().required(),
-  email: Joi.string().email().required(),
-  name: Joi.string().required(),
-  phone: Joi.string().required(),
-  vendor_type: Joi.string().required(),
+  token: Joi.string().required()
 });
 
 // PASSWORD RESET
@@ -61,7 +57,8 @@ exports.resetPasswordSchema = () => Joi.object({
 exports.vendorEditProfileSchema = () => Joi.object({
   name: Joi.string().required(),
   vendor_type: Joi.string().required(),
-  shop_address: Joi.string().required()
+  shop_address: Joi.string().required(),
+  profile_image: Joi.string().uri().optional(),
 });
 
 exports.changePasswordSchema = () => Joi.object({
@@ -100,15 +97,25 @@ exports.menuUploadSchema = () => Joi.object({
   name: Joi.string().required(),
   category: Joi.string().required(),
   description: Joi.string().required(),
-  serving: Joi.string().required(),
-  price: Joi.number().required()
+  servings: Joi.array().items(
+    Joi.object({
+      serving: Joi.string().required(),
+      price: Joi.number().required()
+    })
+  ).required(),
+  image_url: Joi.string().optional()
 });
 
 exports.menuEditSchema = () => Joi.object({
   name: Joi.string().required(),
   description: Joi.string().required(),
-  serving: Joi.string().required(),
-  price: Joi.number().required()
+  servings: Joi.array().items(
+    Joi.object({
+      serving: Joi.string().required(),
+      price: Joi.number().required()
+    })
+  ).required(),
+  image_url: Joi.string().optional()
 });
 
 exports.vendorHoursSchema = () => Joi.object({
@@ -199,4 +206,40 @@ exports.resendOtpSchema = () => Joi.object({
   email: Joi.string().email().required()
 });
 
+exports.userEditProfileSchema = () => Joi.object({
+  name: Joi.string().required(),
+  profile_image: Joi.string().uri().optional(),
+});
 
+exports.userLanguageSchema = () => Joi.object({
+  language: Joi.string().valid(
+    "english",
+    "spanish",
+    "french",
+    "german",
+    "chinese",
+    "japanese",
+    "russian",
+    "portuguese",
+    "italian",
+    "arabic",
+    "dutch"
+  ).required()
+});
+
+// Add Review
+exports.addVendorReviewSchema = () => Joi.object({
+  vendor_id: Joi.string().required(),
+  rating: Joi.number().min(1).max(5).required(),
+  message: Joi.string().allow("", null)
+});
+
+// Delete Review
+exports.deleteVendorReviewSchema = () => Joi.object({
+  id: Joi.string().required()
+});
+
+// Fetch Reviews
+exports.getVendorReviewsSchema = () => Joi.object({
+  vendorId: Joi.string().required()
+});

@@ -68,7 +68,7 @@ async function userSignupVerify(req, res, next) {
     if (!user) return res.status(404).json({ error: "User not found" });
     if (user.verified) return res.status(400).json({ error: "Already verified" });
 
-    const doc = await PasswordOtp.findOne({ email });
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });;
     if (!doc) return res.status(400).json({ error: "Invalid OTP" });
     if (doc.expires_at < Date.now()) return res.status(400).json({ error: "OTP expired" });
     if (String(doc.otp).trim() !== String(otp).trim())

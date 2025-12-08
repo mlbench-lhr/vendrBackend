@@ -28,6 +28,9 @@ const UserSchema = new Schema(
       type: String,
       required: false, // only required for OAuth
     },
+    profile_image: { type: String, default: null },
+    profile_image_public_id: { type: String, default: null },
+    language: { type: String, default: "en" }
   },
   {
     timestamps: true, // createdAt, updatedAt automatically

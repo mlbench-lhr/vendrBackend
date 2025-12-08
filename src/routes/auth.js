@@ -3,21 +3,45 @@ const router = express.Router();
 
 const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
-const userController = require('../controllers/authController');
+const authController = require('../controllers/authController');
+const userController = require('../controllers/userController');
 const vendorController = require('../controllers/vendorAuthController');
 const menuController = require('../controllers/menuController');
 const passwordController = require('../controllers/passwordController');
+const reviewController = require('../controllers/vendorReviewController');
+const uploadController = require('../controllers/uploadController');
 
 const validateBody = require('../middleware/validate');
+const validateParams = require('../middleware/validateParams');
 const schemas = require('../middleware/validators'); // correct file name
 
+// POST /api/upload/image
+router.post('/image', upload.single('image'), uploadController.uploadImage);
+
 // user auth
-router.post('/user/signup-otp', validateBody(schemas.userRegisterSchema), userController.userSignupRequestOtp);
-router.post('/user/signup', validateBody(schemas.verifyOtpSchema), userController.userSignupVerify);
-router.post('/user/login', validateBody(schemas.userLoginSchema), userController.login);
-router.post('/user/oauth', validateBody(schemas.userOauthSchema), userController.oauth);
-router.post('/user/refresh', userController.refresh);
-router.post('/user/logout', userController.logout);
+router.post('/user/signup-otp', validateBody(schemas.userRegisterSchema), authController.userSignupRequestOtp);
+router.post('/user/signup', validateBody(schemas.verifyOtpSchema), authController.userSignupVerify);
+router.post('/user/login', validateBody(schemas.userLoginSchema), authController.login);
+router.post('/user/oauth', validateBody(schemas.userOauthSchema), authController.oauth);
+router.post('/user/refresh', authController.refresh);
+router.post('/user/logout', authController.logout);
+
+router.get('/user/profile', auth, userController.getUserProfile);
+router.get('/user/nearby-vendors', auth, userController.getNearbyVendors);
+router.get("/vendor/:vendorId/details", auth, userController.getVendorDetails);
+router.get('/menus/vendor/:vendor_id', auth, menuController.getMenusByVendor);
+router.put('/user/edit-profile', auth, validateBody(schemas.userEditProfileSchema), userController.editProfile);
+
+// user language
+router.put('/user/language', auth, validateBody(schemas.userLanguageSchema), userController.setLanguage);
+router.get('/user/language', auth, userController.getLanguage);
+
+router.post('/reviews', auth, validateBody(schemas.addVendorReviewSchema), reviewController.addReview);
+router.delete('/reviews/:id', auth, validateParams(schemas.deleteVendorReviewSchema), reviewController.deleteReview);
+router.get('/reviews/:vendorId', validateParams(schemas.getVendorReviewsSchema), reviewController.getReviews);
+
+//delete user account
+router.delete('/user/delete-account', auth, userController.deleteAccount);
 
 // vendor auth
 router.post('/vendor/signup-otp', validateBody(schemas.vendorRegisterSchema), vendorController.vendorSignupRequestOtp);
@@ -27,8 +51,12 @@ router.post('/vendor/oauth', validateBody(schemas.vendorOauthSchema), vendorCont
 router.post('/vendor/logout', vendorController.logout);
 router.post('/vendor/refresh', vendorController.refresh);
 
+//get vendor profile
+router.get('/vendor/profile', auth, vendorController.getVendorProfile);
+router.get('/vendor/reviews', auth, vendorController.getVendorAllReviews);
+
 //vendor edit profile
-router.put('/vendor/edit-profile', auth, upload.single('profile_image'), validateBody(schemas.vendorEditProfileSchema), vendorController.editProfile);
+router.put('/vendor/edit-profile', auth, validateBody(schemas.vendorEditProfileSchema), vendorController.editProfile);
 
 //vendor change phone number request
 router.post('/vendor/change-phone/request', auth, validateBody(schemas.vendorRequestPhoneOtpSchema), vendorController.requestPhoneOtp);
@@ -45,8 +73,8 @@ router.post('/vendor/change-email/verify', auth, validateBody(schemas.vendorVeri
 router.put('/vendor/change-email/update', auth, validateBody(schemas.vendorUpdateEmailSchema), vendorController.updateEmail);
 
 //vendor menu 
-router.post('/vendor/menu/upload', auth, upload.array('images'), validateBody(schemas.menuUploadSchema), menuController.uploadMenu);
-router.put('/vendor/menu/edit/:id', auth, upload.array('images'), validateBody(schemas.menuEditSchema), menuController.editMenu);
+router.post('/vendor/menu/upload', auth, validateBody(schemas.menuUploadSchema), menuController.uploadMenu);
+router.put('/vendor/menu/edit/:id', auth, validateBody(schemas.menuEditSchema), menuController.editMenu);
 router.get('/vendor/menu/list', auth, menuController.listMenus);
 
 //vendor hours

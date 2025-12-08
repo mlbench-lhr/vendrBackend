@@ -1,14 +1,19 @@
 const Vendor = require('../models/Vendor');
+const User = require('../models/User');
 const Menu = require('../models/Menu');
 const VendorHours = require('../models/VendorHours');
 const VendorLocation = require('../models/VendorLocation');
+const VendorReview = require('../models/VendorReview');
 const PasswordOtp = require('../models/PasswordOtp');
 const passwordService = require('../services/passwordService');
 const jwtService = require('../services/jwtService');
+const oauthService = require('../services/oauthService');
 const logger = require('../utils/logger');
 const cloudinary = require('../config/cloudinary');
 const { generateOtp } = require('../services/passwordService');
 const { sendEmail } = require('../emails/sendEmail');
+const mongoose = require("mongoose");
+const ObjectId = mongoose.Types.ObjectId;
 
 // EMAIL REGISTRATION
 exports.vendorSignupRequestOtp = async (req, res, next) => {
@@ -74,11 +79,11 @@ exports.vendorSignupVerify = async (req, res, next) => {
     if (vendor.verified === true)
       return res.status(400).json({ error: "Already verified" });
 
-    const doc = await PasswordOtp.findOne({ email });
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });;
 
     if (!doc) return res.status(400).json({ error: 'Invalid OTP' });
     if (doc.expires_at < Date.now()) return res.status(400).json({ error: 'OTP expired' });
-    if (doc.otp !== String(doc.otp)) return res.status(400).json({ error: 'Incorrect OTP' });
+    if (doc.otp !== String(otp)) return res.status(400).json({ error: 'Incorrect OTP' });
 
     vendor.verified = true;
     await vendor.save();
@@ -160,7 +165,16 @@ exports.login = async (req, res, next) => {
 // OAUTH
 exports.oauth = async (req, res, next) => {
   try {
-    const { provider, provider_id, email, name, phone, vendor_type } = req.body;
+    const { provider, token } = req.body;
+
+    let verified;
+
+    if (provider === 'google') {
+      verified = await oauthService.verifyGoogleToken(token);
+    }
+    const provider_id = verified.sub;
+    const email = verified.email;
+    const name = verified.name;
 
     let vendor = await Vendor.findOne({ provider, provider_id });
 
@@ -169,9 +183,7 @@ exports.oauth = async (req, res, next) => {
         provider,
         provider_id,
         email,
-        name,
-        phone: phone || null,
-        vendor_type: vendor_type || null
+        name
       });
     }
 
@@ -181,16 +193,7 @@ exports.oauth = async (req, res, next) => {
     const refreshToken = jwtService.signRefresh(payload);
 
     return res.json({
-      vendor: {
-        id: vendor._id.toString(),
-        name: vendor.name,
-        email: vendor.email,
-        phone: vendor.phone,
-        vendor_type: vendor.vendor_type,
-        provider: vendor.provider,
-        provider_id: vendor.provider_id,
-        createdAt: vendor.createdAt
-      },
+      vendor,
       tokens: {
         accessToken,
         refreshToken,
@@ -253,9 +256,13 @@ exports.refresh = async (req, res, next) => {
 exports.editProfile = async (req, res, next) => {
   try {
     const vendorId = req.user.id;
-    const { name, vendor_type, shop_address } = req.body;
+    const { name, vendor_type, shop_address, profile_image } = req.body;
 
     let updateData = { name, vendor_type, shop_address };
+
+    if (profile_image) {
+      updateData.profile_image = profile_image;
+    }
 
     // Fetch vendor to get old image public_id
     const vendor = await Vendor.findById(vendorId);
@@ -264,38 +271,6 @@ exports.editProfile = async (req, res, next) => {
         success: false,
         message: "Vendor not found"
       });
-    }
-
-    // If new image is uploaded
-    if (req.file) {
-      try {
-        // 1️⃣ Delete old image if exists
-        if (vendor.profile_image_public_id) {
-          await cloudinary.uploader.destroy(vendor.profile_image_public_id);
-        }
-
-        // 2️⃣ Upload new image
-        const uploadedImage = await new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            { folder: "vendors/profile_images" },
-            (error, result) => {
-              if (error) reject(error);
-              else resolve(result);
-            }
-          );
-          stream.end(req.file.buffer);
-        });
-
-        updateData.profile_image = uploadedImage.secure_url;
-        updateData.profile_image_public_id = uploadedImage.public_id;
-
-      } catch (cloudErr) {
-        return res.status(500).json({
-          success: false,
-          message: "Image upload failed",
-          error: cloudErr.message
-        });
-      }
     }
 
     // Update vendor record
@@ -471,7 +446,7 @@ exports.verifyEmailOtp = async (req, res, next) => {
     if (vendor.email !== email)
       return res.status(400).json({ error: 'Old email incorrect' });
 
-    const doc = await PasswordOtp.findOne({ email });
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });;
     if (!doc) return res.status(400).json({ error: 'OTP invalid' });
     if (doc.expires_at < Date.now()) return res.status(400).json({ error: 'OTP expired' });
     if (doc.otp !== String(otp)) return res.status(400).json({ error: 'OTP incorrect' });
@@ -653,6 +628,77 @@ exports.getLanguage = async (req, res, next) => {
   }
 };
 
+//get vendor profile
+exports.getVendorProfile = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id; // vendor authenticated ID
+
+    // 1. Vendor Basic Info
+    const vendor = await Vendor.findById(vendorId).select(
+      "name profile_image vendor_type shop_address email phone"
+    );
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "Vendor not found" });
+    }
+
+    // 2. Vendor Location
+    const location = await VendorLocation.findOne({ vendor_id: vendorId });
+
+    // 3. Vendor Hours
+    const hours = await VendorHours.findOne({ vendor_id: vendorId });
+
+    // 4. Vendor Menus
+    const menus = await Menu.find({ vendor_id: vendorId });
+
+    // 5. Vendor Reviews + User Info
+    let reviews = await VendorReview.find({ vendor_id: vendorId }).sort({ created_at: -1 }).limit(2)
+      .lean();
+
+    const total_reviews = reviews.length;
+    const average_rating = total_reviews > 0
+      ? (reviews.reduce((sum, r) => sum + r.rating, 0) / total_reviews).toFixed(1)
+      : 0;
+
+    reviews = await Promise.all(
+      reviews.map(async (r) => {
+        let userData = null;
+
+        if (r && r.user_id) {
+          userData = await User.findById(r.user_id).select("name profile_image");
+        }
+
+        return {
+          _id: r._id,
+          rating: r.rating,
+          message: r.message,
+          created_at: r.created_at,
+          user: {
+            name: userData?.name || r.user_name || "Deleted User",
+            profile_image: userData?.profile_image || r.user_profile_image || null
+          }
+        };
+      })
+    );
+
+    return res.json({
+      success: true,
+      vendor,
+      location,
+      hours,
+      menus,
+      reviews: {
+        average_rating: Number(average_rating),
+        total_reviews,
+        list: reviews
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 //delete account
 exports.deleteAccount = async (req, res, next) => {
   try {
@@ -675,3 +721,71 @@ exports.deleteAccount = async (req, res, next) => {
     });
   }
 };
+
+//get all reviews
+exports.getVendorAllReviews = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id; // vendor logged in
+
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Stats
+    const stats = await VendorReview.aggregate([
+      { $match: { vendor_id: new ObjectId(vendorId) } },
+      {
+        $group: {
+          _id: null,
+          average_rating: { $avg: "$rating" },
+          total_reviews: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const average_rating = stats.length ? stats[0].average_rating : 0;
+    const total_reviews = stats.length ? stats[0].total_reviews : 0;
+
+    // Paginated reviews
+    const reviewsList = await VendorReview.find({ vendor_id: vendorId })
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const reviews = await Promise.all(
+      reviewsList.map(async (r) => {
+        let user = null;
+
+        if (r.user_id) {
+          user = await User.findById(r.user_id).select("name profile_image").lean();
+        }
+
+        return {
+          _id: r._id,
+          rating: r.rating,
+          message: r.message,
+          created_at: r.created_at,
+          user: {
+            name: user?.name || r.user_name || "Deleted User",
+            profile_image: user?.profile_image || r.user_profile_image || null
+          }
+        };
+      })
+    );
+
+    return res.json({
+      success: true,
+      vendor_id: vendorId,
+      average_rating: Number(average_rating.toFixed(1)),
+      total_reviews,
+      page,
+      limit,
+      reviews
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
