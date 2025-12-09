@@ -76,6 +76,7 @@ router.put('/vendor/change-email/update', auth, validateBody(schemas.vendorUpdat
 //vendor menu 
 router.post('/vendor/menu/upload', auth, validateBody(schemas.menuUploadSchema), menuController.uploadMenu);
 router.put('/vendor/menu/edit/:id', auth, validateBody(schemas.menuEditSchema), menuController.editMenu);
+router.delete('/vendor/menu/:id', auth, menuController.deleteMenu);
 router.get('/vendor/menu/list', auth, menuController.listMenus);
 
 //vendor hours

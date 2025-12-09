@@ -105,3 +105,35 @@ exports.getMenusByVendor = async (req, res) => {
         return res.status(500).json({ message: "Server error" });
     }
 };
+
+exports.deleteMenu = async (req, res, next) => {
+    try {
+        const vendorId = req.user.id;
+        const { id } = req.params; // menu id
+
+        // Find the menu belonging to this vendor
+        const menu = await Menu.findOne({ _id: id, vendor_id: vendorId });
+
+        if (!menu) {
+            return res.status(404).json({
+                success: false,
+                message: "Menu not found or unauthorized access"
+            });
+        }
+
+        // Delete from database
+        await Menu.deleteOne({ _id: id });
+
+        return res.json({
+            success: true,
+            message: "Menu deleted successfully"
+        });
+    } catch (err) {
+        console.error("Delete Menu Error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message
+        });
+    }
+};
