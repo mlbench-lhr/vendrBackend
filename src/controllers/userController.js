@@ -228,7 +228,7 @@ exports.getNearbyVendors = async (req, res, next) => {
 
         const vendorsWithDistance = await Promise.all(
             vendorLocations.map(async (vLoc) => {
-                
+
                 const vendor = await Vendor.findById(vLoc.vendor_id).select("name profile_image vendor_type shop_address");
                 console.log(`Vendor ${vendor.name}`);
 
@@ -297,5 +297,84 @@ const getTodaysHoursCount = (hours) => {
 
     return diffHours > 0 ? diffHours : 0;
 };
+
+exports.searchVendors = async (req, res, next) => {
+    try {
+        const { query = "" } = req.query;
+        if (!query.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Search query is required"
+            });
+        }
+
+        const text = query.trim();
+
+        // 1️⃣ Vendors matching by vendor name, vendor type, shop address
+        const vendorsMatch = await Vendor.find({
+            $or: [
+                { name: { $regex: text, $options: "i" } },
+                { vendor_type: { $regex: text, $options: "i" } },
+                { shop_address: { $regex: text, $options: "i" } }
+            ]
+        }).select("_id");
+
+        // 2️⃣ Vendors matching menus (menu name OR category)
+        const menusMatch = await Menu.find({
+            $or: [
+                { name: { $regex: text, $options: "i" } },
+                { category: { $regex: text, $options: "i" } }
+            ]
+        }).select("vendor_id");
+
+        // Collect unique vendor IDs
+        const vendorIds = [
+            ...vendorsMatch.map(v => v._id.toString()),
+            ...menusMatch.map(m => m.vendor_id.toString())
+        ];
+
+        const uniqueVendorIds = [...new Set(vendorIds)];
+
+        if (uniqueVendorIds.length === 0) {
+            return res.json({ success: true, count: 0, vendors: [] });
+        }
+
+        // Fetch vendor details
+        const vendors = await Vendor.find({
+            _id: { $in: uniqueVendorIds }
+        }).select("name profile_image vendor_type shop_address");
+
+        // Add additional info: total menus + today's hours
+        const enrichedVendors = await Promise.all(
+            vendors.map(async (vendor) => {
+                const totalMenus = await Menu.countDocuments({ vendor_id: vendor._id });
+
+                const hours = await VendorHours.findOne({ vendor_id: vendor._id });
+                const todaysHoursCount = getTodaysHoursCount(hours);
+
+                return {
+                    ...vendor.toObject(),
+                    total_menus: totalMenus,
+                    todays_hours_count: todaysHoursCount
+                };
+            })
+        );
+
+        return res.json({
+            success: true,
+            count: enrichedVendors.length,
+            vendors: enrichedVendors
+        });
+
+    } catch (err) {
+        console.error("Search Vendors Error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message
+        });
+    }
+};
+
 
 

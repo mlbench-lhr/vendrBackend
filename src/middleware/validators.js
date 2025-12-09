@@ -55,9 +55,9 @@ exports.resetPasswordSchema = () => Joi.object({
 });
 
 exports.vendorEditProfileSchema = () => Joi.object({
-  name: Joi.string().required(),
-  vendor_type: Joi.string().required(),
-  shop_address: Joi.string().required(),
+  name: Joi.string().optional(),
+  vendor_type: Joi.string().optional(),
+  shop_address: Joi.string().optional(),
   profile_image: Joi.string().uri().optional(),
 });
 
@@ -99,21 +99,21 @@ exports.menuUploadSchema = () => Joi.object({
   servings: Joi.array().items(
     Joi.object({
       serving: Joi.string().required(),
-      price: Joi.number().required()
+      price: Joi.string().required()
     })
   ).required(),
   image_url: Joi.string().optional()
 });
 
 exports.menuEditSchema = () => Joi.object({
-  name: Joi.string().required(),
-  description: Joi.string().required(),
+  name: Joi.string().optional(),
+  description: Joi.string().optional(),
   servings: Joi.array().items(
     Joi.object({
       serving: Joi.string().required(),
       price: Joi.number().required()
     })
-  ).required(),
+  ).optional(),
   image_url: Joi.string().optional()
 });
 

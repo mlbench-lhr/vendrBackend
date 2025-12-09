@@ -9,7 +9,7 @@ const MenuSchema = new mongoose.Schema({
     servings: [
         {
             serving: { type: String, required: true },  // e.g., "Single Serving"
-            price: { type: Number, required: true }     // e.g., 10
+            price: { type: String, required: true }     // e.g., 10
         }
     ],
     created_at: { type: Date, default: Date.now }

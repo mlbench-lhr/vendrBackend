@@ -28,6 +28,7 @@ router.post('/user/logout', authController.logout);
 
 router.get('/user/profile', auth, userController.getUserProfile);
 router.get('/user/nearby-vendors', auth, userController.getNearbyVendors);
+router.get('/vendors/search', auth, userController.searchVendors);
 router.get("/vendor/:vendorId/details", auth, userController.getVendorDetails);
 router.get('/menus/vendor/:vendor_id', auth, menuController.getMenusByVendor);
 router.put('/user/edit-profile', auth, validateBody(schemas.userEditProfileSchema), userController.editProfile);
