@@ -707,18 +707,18 @@ exports.getVendorProfile = async (req, res, next) => {
     const vendorProfile = {
       ...vendor.toObject(),
       hours,
-      menus
-    };
-
-    return res.json({
-      success: true,
-      vendor: vendorProfile,
+      menus,
       location,
       reviews: {
         average_rating: Number(average_rating),
         total_reviews,
         list: reviews
       }
+    };
+
+    return res.json({
+      success: true,
+      vendor: vendorProfile,
     });
 
   } catch (error) {
