@@ -500,13 +500,36 @@ exports.setVendorHours = async (req, res, next) => {
     const vendorId = req.user.id;
     const { days } = req.body;
 
+    // Validate that days object exists
+    if (!days) {
+      return res.status(400).json({ success: false, message: "Days object is required" });
+    }
+
+    // Use $set to update only the fields provided
     const updated = await VendorHours.findOneAndUpdate(
       { vendor_id: vendorId },
-      { vendor_id: vendorId, days, updated_at: Date.now() },
+      { $set: { vendor_id: vendorId, days, updated_at: Date.now() } },
       { upsert: true, new: true }
     );
 
-    return res.json({ success: true, hours: updated });
+    const vendor = await Vendor.findById(vendorId).select(
+      "name profile_image vendor_type shop_address email phone"
+    );
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "Vendor not found" });
+    }
+
+    // Merge hours into vendor object
+    const vendorWithHours = {
+      ...vendor.toObject(),
+      hours: updated
+    };
+
+    return res.json({
+      success: true,
+      vendor: vendorWithHours
+    });
   } catch (err) {
     console.error("Set vendor hours Error:", err);
     return res.status(500).json({
