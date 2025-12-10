@@ -720,7 +720,7 @@ exports.getVendorProfile = async (req, res, next) => {
       reviews: {
         average_rating: Number(average_rating),
         total_reviews,
-        list: reviews
+        reviews: reviews
       }
     };
 
