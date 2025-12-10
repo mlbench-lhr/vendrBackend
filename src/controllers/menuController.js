@@ -32,15 +32,31 @@ exports.editMenu = async (req, res, next) => {
     try {
         const vendorId = req.user.id;
         const { id } = req.params;
-        const { name, description, servings, image_url } = req.body;
+        const { name, category, description, servings, image_url } = req.body;
 
-        const menu = await Menu.findOne({ _id: id, vendor_id: vendorId });
-        if (!menu) return res.status(404).json({ error: "Menu item not found" });
+        const menu = await Menu.findById(id);
 
-        menu.name = name;
-        menu.description = description;
-        menu.servings = Array.isArray(servings) ? servings : [];
-        menu.image_url = image_url;
+        if (!menu) {
+            return res.status(404).json({
+                success: false,
+                code: "MENU_NOT_FOUND",
+                message: "No menu item exists with the provided ID"
+            });
+        }
+
+        if (String(menu.vendor_id) !== String(vendorId)) {
+            return res.status(403).json({
+                success: false,
+                code: "UNAUTHORIZED_MENU_ACCESS",
+                message: "This menu item does not belong to the authenticated vendor"
+            });
+        }
+
+        if (name !== undefined) menu.name = name;
+        if (category !== undefined) menu.category = category;
+        if (description !== undefined) menu.description = description;
+        if (servings !== undefined) menu.servings = Array.isArray(servings) ? servings : menu.servings;
+        if (image_url !== undefined) menu.image_url = image_url;
 
         await menu.save();
 

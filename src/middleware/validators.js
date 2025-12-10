@@ -107,6 +107,7 @@ exports.menuUploadSchema = () => Joi.object({
 
 exports.menuEditSchema = () => Joi.object({
   name: Joi.string().optional(),
+  category: Joi.string().optional(),
   description: Joi.string().optional(),
   servings: Joi.array().items(
     Joi.object({
