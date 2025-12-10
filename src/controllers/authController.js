@@ -124,6 +124,14 @@ async function login(req, res, next) {
     const match = await passwordService.comparePassword(password, user.passwordHash);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
+    // Block login if not verified
+    if (!user.verified) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is not verified. Please verify your email to continue."
+      });
+    }
+
     const payload = { id: user._id.toString(), email: user.email, role: 'user' };
 
     return res.json({

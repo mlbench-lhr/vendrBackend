@@ -132,6 +132,14 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Block login if not verified
+    if (!vendor.verified) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is not verified. Please verify your email to continue."
+      });
+    }
+
     const ok = await passwordService.comparePassword(password, vendor.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
