@@ -10,6 +10,8 @@ const menuController = require('../controllers/menuController');
 const passwordController = require('../controllers/passwordController');
 const reviewController = require('../controllers/vendorReviewController');
 const uploadController = require('../controllers/uploadController');
+const favoriteController = require('../controllers/favoriteController');
+const notificationController = require('../controllers/notificationController');
 
 const validateBody = require('../middleware/validate');
 const validateParams = require('../middleware/validateParams');
@@ -99,6 +101,14 @@ router.post('/forgot-password', validateBody(schemas.forgotPasswordSchema), pass
 router.post('/verify-otp', validateBody(schemas.verifyOtpSchema), passwordController.verifyOtp);
 router.post('/reset-password', validateBody(schemas.resetPasswordSchema), passwordController.resetPassword);
 
+// seed sample notifications
+router.post("/notifications/seed", notificationController.seedSampleNotifications);
 
+// get notifications for logged-in vendor or user
+router.get("/notifications", auth, notificationController.getNotifications);
+
+router.post("/add-favorite", auth, favoriteController.addFavorite);
+router.post("/remove-favorite", auth, favoriteController.removeFavorite);
+router.get("/favorites", auth, favoriteController.getFavorites);
 
 module.exports = router;

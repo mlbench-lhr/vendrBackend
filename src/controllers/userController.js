@@ -4,6 +4,7 @@ const VendorLocation = require("../models/VendorLocation");
 const Menu = require("../models/Menu");
 const VendorReview = require("../models/VendorReview");
 const User = require("../models/User");
+const FavoriteVendor = require("../models/FavoriteVendor");
 const cloudinary = require('../config/cloudinary');
 
 exports.editProfile = async (req, res) => {
@@ -114,15 +115,20 @@ exports.getVendorDetails = async (req, res, next) => {
             distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
 
-        return res.json({
-            success: true,
-            vendor,
+        const vendorProfile = {
+            ...vendor.toObject(),
             location,
             distance_in_km: distance ? Number(distance.toFixed(1)) : null,
             open_status,
             hours,
             menus,
             reviews
+        };
+
+        return res.json({
+            success: true,
+            vendor: vendorProfile,
+
         });
     } catch (err) {
         next(err);
@@ -205,7 +211,20 @@ exports.getUserProfile = async (req, res) => {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
-        return res.json({ success: true, user });
+        // Get favorite vendor IDs
+        const favorites = await FavoriteVendor.find({ userId }).lean();
+        const vendorIds = favorites.map(f => f.vendorId);
+
+        // Fetch vendor details
+        const favoriteVendors = await Vendor.find({ _id: { $in: vendorIds } })
+            .select("name email phone vendor_type profile_image created_at");
+
+        const userProfile = {
+            ...user.toObject(),
+            favoriteVendors
+        };
+
+        return res.json({ success: true, user: userProfile });
     } catch (err) {
         return res.status(500).json({
             success: false,
