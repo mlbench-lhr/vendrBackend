@@ -57,7 +57,7 @@ exports.getVendorDetails = async (req, res, next) => {
 
         // 1. Vendor Basic Info
         const vendor = await Vendor.findById(vendorId).select(
-            "name profile_image vendor_type shop_address"
+            "name profile_image vendor_type shop_address lat lng"
         );
 
         if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
@@ -248,7 +248,7 @@ exports.getNearbyVendors = async (req, res, next) => {
         const vendorsWithDistance = await Promise.all(
             vendorLocations.map(async (vLoc) => {
 
-                const vendor = await Vendor.findById(vLoc.vendor_id).select("name profile_image vendor_type shop_address");
+                const vendor = await Vendor.findById(vLoc.vendor_id).select("name profile_image vendor_type shop_address lat lng");
                 console.log(`Vendor ${vendor.name}`);
 
                 if (!vendor) return null;
@@ -361,7 +361,7 @@ exports.searchVendors = async (req, res, next) => {
         // Fetch vendor details
         const vendors = await Vendor.find({
             _id: { $in: uniqueVendorIds }
-        }).select("name profile_image vendor_type shop_address");
+        }).select("name profile_image vendor_type shop_address lat lng");
 
         // Add additional info: total menus + today's hours
         const enrichedVendors = await Promise.all(
