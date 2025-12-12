@@ -59,6 +59,8 @@ exports.vendorEditProfileSchema = () => Joi.object({
   vendor_type: Joi.string().optional(),
   shop_address: Joi.string().optional(),
   profile_image: Joi.string().uri().optional(),
+  lat: Joi.number().allow(null),
+  lng: Joi.number().allow(null)
 });
 
 exports.changePasswordSchema = () => Joi.object({

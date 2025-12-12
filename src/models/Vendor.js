@@ -46,6 +46,8 @@ const VendorSchema = new Schema(
     profile_image: { type: String, default: null },
     profile_image_public_id: { type: String, default: null },
     shop_address: { type: String, default: null },
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null },
     language: { type: String, default: "en" }
   },
   {

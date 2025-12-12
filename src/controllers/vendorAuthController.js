@@ -264,9 +264,9 @@ exports.refresh = async (req, res, next) => {
 exports.editProfile = async (req, res, next) => {
   try {
     const vendorId = req.user.id;
-    const { name, vendor_type, shop_address, profile_image } = req.body;
+    const { name, vendor_type, shop_address, profile_image, lat, lng } = req.body;
 
-    let updateData = { name, vendor_type, shop_address };
+    let updateData = { name, vendor_type, shop_address, lat, lng };
 
     if (profile_image) {
       updateData.profile_image = profile_image;
