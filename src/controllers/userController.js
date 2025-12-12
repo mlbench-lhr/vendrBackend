@@ -242,35 +242,30 @@ exports.getNearbyVendors = async (req, res, next) => {
         const userLat = parseFloat(lat);
         const userLng = parseFloat(lng);
 
-        // Fetch all vendors with locations
-        const vendorLocations = await VendorLocation.find();
+        // Fetch vendors that have lat/lng saved in their model
+        const vendors = await Vendor.find({
+            lat: { $exists: true, $ne: null },
+            lng: { $exists: true, $ne: null }
+        }).select("name profile_image vendor_type shop_address lat lng");
 
         const vendorsWithDistance = await Promise.all(
-            vendorLocations.map(async (vLoc) => {
+            vendors.map(async (vendor) => {
 
-                const vendor = await Vendor.findById(vLoc.vendor_id).select("name profile_image vendor_type shop_address lat lng");
-                console.log(`Vendor ${vendor.name}`);
-
-                if (!vendor) return null;
-
-                // Distance calculation (Haversine formula)
-                let distance = null;
-                if (vLoc.fixed_location) {
-                    const R = 6371; // km
-                    const dLat = (vLoc.fixed_location.lat - userLat) * (Math.PI / 180);
-                    const dLng = (vLoc.fixed_location.lng - userLng) * (Math.PI / 180);
-                    const a =
-                        Math.sin(dLat / 2) ** 2 +
-                        Math.cos(userLat * (Math.PI / 180)) *
-                        Math.cos(vLoc.fixed_location.lat * (Math.PI / 180)) *
-                        Math.sin(dLng / 2) ** 2;
-                    distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                }
+                // Calculate Haversine distance using vendor.lat & vendor.lng
+                const R = 6371; // km
+                const dLat = (vendor.lat - userLat) * (Math.PI / 180);
+                const dLng = (vendor.lng - userLng) * (Math.PI / 180);
+                const a =
+                    Math.sin(dLat / 2) ** 2 +
+                    Math.cos(userLat * (Math.PI / 180)) *
+                    Math.cos(vendor.lat * (Math.PI / 180)) *
+                    Math.sin(dLng / 2) ** 2;
+                const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
                 // Total menus
                 const totalMenus = await Menu.countDocuments({ vendor_id: vendor._id });
 
-                // Today's enabled hours
+                // Today's hours count
                 const hours = await VendorHours.findOne({ vendor_id: vendor._id });
                 const todaysHoursCount = getTodaysHoursCount(hours);
 
@@ -278,15 +273,15 @@ exports.getNearbyVendors = async (req, res, next) => {
                     ...vendor.toObject(),
                     total_menus: totalMenus,
                     todays_hours_count: todaysHoursCount,
-                    distance_in_km: distance ? Number(distance.toFixed(1)) : null
+                    distance_in_km: Number(distance.toFixed(1))
                 };
             })
         );
 
-        // Filter nearby vendors based on maxDistance
+        // Filter by distance
         const nearbyVendors = vendorsWithDistance
-            .filter(v => v && (v.distance_in_km === null || v.distance_in_km <= maxDistance))
-            .sort((a, b) => (a.distance_in_km || 0) - (b.distance_in_km || 0));
+            .filter(v => v.distance_in_km <= maxDistance)
+            .sort((a, b) => a.distance_in_km - b.distance_in_km);
 
         return res.json({ success: true, count: nearbyVendors.length, vendors: nearbyVendors });
     } catch (err) {
