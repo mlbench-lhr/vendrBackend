@@ -209,7 +209,7 @@ exports.resendOtpSchema = () => Joi.object({
 });
 
 exports.userEditProfileSchema = () => Joi.object({
-  name: Joi.string().required(),
+  name: Joi.string().optional(),
   profile_image: Joi.string().uri().optional(),
   new_vendor_alert: Joi.boolean().optional(),
   distance_based_alert: Joi.boolean().optional(),
