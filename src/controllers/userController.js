@@ -10,7 +10,7 @@ const cloudinary = require('../config/cloudinary');
 exports.editProfile = async (req, res) => {
     try {
         const userId = req.user.id; // from auth middleware
-        const { name, profile_image } = req.body;
+        const { name, profile_image, new_vendor_alert, distance_based_alert, favorite_vendor_alert } = req.body;
 
         let updateData = {};
         if (name) updateData.name = name;
@@ -18,6 +18,18 @@ exports.editProfile = async (req, res) => {
         // Only update profile image if provided
         if (profile_image) {
             updateData.profile_image = profile_image;
+        }
+
+        if (typeof new_vendor_alert === "boolean") {
+            updateData.new_vendor_alert = new_vendor_alert;
+        }
+
+        if (typeof distance_based_alert === "boolean") {
+            updateData.distance_based_alert = distance_based_alert;
+        }
+
+        if (typeof favorite_vendor_alert === "boolean") {
+            updateData.favorite_vendor_alert = favorite_vendor_alert;
         }
 
         // Update user record
@@ -219,11 +231,11 @@ exports.getUserProfile = async (req, res) => {
         const userId = req.user.id;
 
         const user = await User.findById(userId).select(
-            "name email profile_image"
+            "name email profile_image new_vendor_alert distance_based_alert favorite_vendor_alert"
         );
 
         if (!user) {
-            return res.status(404).json({ success: false, message: "User not found" });
+             return res.status(404).json({ success: false, message: "User not found" });
         }
 
         // Get favorite vendor IDs

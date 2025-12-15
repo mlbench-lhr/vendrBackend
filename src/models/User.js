@@ -30,7 +30,10 @@ const UserSchema = new Schema(
     },
     profile_image: { type: String, default: null },
     profile_image_public_id: { type: String, default: null },
-    language: { type: String, default: "en" }
+    language: { type: String, default: "en" },
+    new_vendor_alert: { type: Boolean, default: false },
+    distance_based_alert: { type: Boolean, default: false },
+    favorite_vendor_alert: { type: Boolean, default: false },
   },
   {
     timestamps: true, // createdAt, updatedAt automatically
