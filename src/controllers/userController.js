@@ -82,19 +82,30 @@ exports.getVendorDetails = async (req, res, next) => {
         const menus = await Menu.find({ vendor_id: vendorId });
 
         // 5. Vendor Reviews (with user info)
-        let reviews = await VendorReview.find({ vendor_id: vendorId }).sort({ created_at: -1 });
+        let reviews = await VendorReview.find({ vendor_id: vendorId }).sort({ created_at: -1 }).lean();
+
+        const total_reviews = reviews.length;
+        const average_rating =
+            total_reviews > 0
+                ? (reviews.reduce((sum, r) => sum + r.rating, 0) / total_reviews).toFixed(1)
+                : 0;
 
         reviews = await Promise.all(
             reviews.map(async (r) => {
-                const user = await User.findById(r.user_id).select("name profile_image");
+                let userData = null;
+                if (r.user_id) {
+                    userData = await User.findById(r.user_id).select("name profile_image");
+                }
                 return {
+                    _id: r._id,
                     rating: r.rating,
                     message: r.message,
                     created_at: r.created_at,
                     user: {
-                        name: user?.name || "Unknown User",
-                        profile_image: user?.profile_image
-                    }
+                        name: userData?.name || r.user_name || "Deleted User",
+                        profile_image:
+                            userData?.profile_image || r.user_profile_image || null,
+                    },
                 };
             })
         );
@@ -122,7 +133,11 @@ exports.getVendorDetails = async (req, res, next) => {
             open_status,
             hours,
             menus,
-            reviews
+            reviews: {
+                average_rating: Number(average_rating),
+                total_reviews,
+                reviews: reviews,
+            },
         };
 
         return res.json({
