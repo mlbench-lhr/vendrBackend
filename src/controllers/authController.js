@@ -14,7 +14,7 @@ async function userSignupRequestOtp(req, res, next) {
   try {
     const { name, email, password } = req.body;
 
-    const existing = await User.findOne({ email, deleted: false });
+    const existing = await User.findOne({ email });
     if (existing) return res.status(409).json({ error: "Email already registered" });
 
     const passwordHash = await passwordService.hashPassword(password);
