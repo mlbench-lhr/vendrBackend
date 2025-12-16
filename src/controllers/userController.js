@@ -69,7 +69,7 @@ exports.getVendorDetails = async (req, res, next) => {
 
         // 1. Vendor Basic Info
         const vendor = await Vendor.findById(vendorId).select(
-            "name profile_image vendor_type shop_address lat lng"
+            "name profile_image phone vendor_type shop_address lat lng"
         );
 
         if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
