@@ -114,7 +114,7 @@ exports.menuEditSchema = () => Joi.object({
   servings: Joi.array().items(
     Joi.object({
       serving: Joi.string().required(),
-      price: Joi.number().required()
+      price: Joi.string().required()
     })
   ).optional(),
   image_url: Joi.string().optional()
