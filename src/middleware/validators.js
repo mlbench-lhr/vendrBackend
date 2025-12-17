@@ -41,17 +41,20 @@ exports.vendorOauthSchema = () => Joi.object({
 // PASSWORD RESET
 exports.forgotPasswordSchema = () => Joi.object({
   email: Joi.string().email().required(),
+  is_user: Joi.boolean().required()
 });
 
 exports.verifyOtpSchema = () => Joi.object({
   email: Joi.string().email().required(),
   otp: Joi.string().required(),
+  is_user: Joi.boolean().required()
 });
 
 exports.resetPasswordSchema = () => Joi.object({
   email: Joi.string().email().required(),
   otp: Joi.string().required(),
   new_password: Joi.string().min(8).required(),
+  is_user: Joi.boolean().required()
 });
 
 exports.vendorEditProfileSchema = () => Joi.object({
@@ -205,7 +208,8 @@ exports.vendorLanguageSchema = () => Joi.object({
 });
 
 exports.resendOtpSchema = () => Joi.object({
-  email: Joi.string().email().required()
+  email: Joi.string().email().required(),
+  is_user: Joi.boolean().required()
 });
 
 exports.userEditProfileSchema = () => Joi.object({

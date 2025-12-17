@@ -13,6 +13,7 @@ const { sendEmail } = require('../emails/sendEmail');
 async function userSignupRequestOtp(req, res, next) {
   try {
     const { name, email, password } = req.body;
+    let role = "user";
 
     const existing = await User.findOne({ email });
     if (existing) return res.status(409).json({ error: "Email already registered" });
@@ -32,7 +33,7 @@ async function userSignupRequestOtp(req, res, next) {
 
     await PasswordOtp.findOneAndUpdate(
       { email },
-      { email, otp, expires_at },
+      { email, otp, role, expires_at },
       { upsert: true }
     );
 
@@ -63,12 +64,19 @@ async function userSignupRequestOtp(req, res, next) {
 async function userSignupVerify(req, res, next) {
   try {
     const { email, otp } = req.body;
+    let role = "user";
 
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: "User not found" });
     if (user.verified) return res.status(400).json({ error: "Already verified" });
 
-    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });;
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });
+    if (doc.role !== role) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP"
+      });
+    }
     if (!doc) return res.status(400).json({ error: "Invalid OTP" });
     if (doc.expires_at < Date.now()) return res.status(400).json({ error: "OTP expired" });
     if (String(doc.otp).trim() !== String(otp).trim())
@@ -119,7 +127,8 @@ async function login(req, res, next) {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    if (!user) return res.status(401).json({ error: 'Account not found' });
 
     const match = await passwordService.comparePassword(password, user.passwordHash);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });

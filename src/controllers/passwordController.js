@@ -10,22 +10,31 @@ const OTP_TTL = (parseInt(process.env.OTP_TTL_MINUTES || '10', 10) * 60 * 1000);
 
 exports.forgotPassword = async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { email, is_user } = req.body;
     // Check if email exists in User OR Vendor
-    const user = await User.findOne({ email });
-    const vendor = await Vendor.findOne({ email });
 
-    if (!user && !vendor) {
+    let account = null;
+    let role = null;
+    if (is_user === true) {
+      account = await User.findOne({ email });
+      role = "user";
+    } else {
+      account = await Vendor.findOne({ email });
+      role = "vendor";
+    }
+
+    if (!account) {
       return res.status(404).json({
         success: false,
-        message: "Email not found"
+        message: "Account not found"
       });
     }
+
     const otp = generateOtp(4);
     const expires_at = Date.now() + OTP_TTL;
     await PasswordOtp.findOneAndUpdate(
       { email },
-      { email, otp, expires_at },
+      { email, otp, role, expires_at },
       { upsert: true, new: true }
     );
     const otpEmailTemplate = require('../emails/templates/otpEmail');
@@ -43,28 +52,81 @@ exports.forgotPassword = async (req, res, next) => {
 
 exports.verifyOtp = async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
-    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });;
-    if (!doc) return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    const { email, otp, is_user } = req.body;
+
+    const expectedRole = is_user ? "user" : "vendor";
+
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });
+
+    if (!doc) {
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
+    }
+
+    if (doc.role !== expectedRole) {
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
+    }
     if (doc.expires_at < Date.now()) return res.status(400).json({ success: false, message: 'OTP expired' });
+
     if (doc.otp !== String(otp)) return res.status(400).json({ success: false, message: 'Invalid OTP' });
+
     return res.json({ success: true, message: 'OTP verified' });
-  } catch (err) { next(err); }
+
+  } catch (err) {
+    next(err);
+  }
 };
 
 exports.resetPassword = async (req, res, next) => {
   try {
-    const { email, otp, new_password } = req.body;
+    const { email, otp, new_password, is_user } = req.body;
+
+    const expectedRole = is_user ? 'user' : 'vendor';
+
     const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });
+
+    if (!doc) {
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
+    }
+    if (doc.role !== expectedRole) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP"
+      });
+    }
+
     if (!doc || doc.otp !== String(otp) || doc.expires_at < Date.now()) {
       return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
     }
     const hash = await passwordService.hashPassword(new_password);
-    const user = await User.findOneAndUpdate({ email }, { passwordHash: hash }, { new: true });
-    const vendor = await Vendor.findOneAndUpdate({ email }, { passwordHash: hash }, { new: true });
+
+    if (expectedRole === "user") {
+      const user = await User.findOne({ email });
+      if (!user) {
+        await PasswordOtp.deleteOne({ email });
+        return res.status(404).json({
+          success: false,
+          message: "Account not found"
+        });
+      }
+      updatedUser = await User.updateOne({ email }, { passwordHash: hash });
+    } else {
+      const vendor = await Vendor.findOne({ email });
+      if (!vendor) {
+        await PasswordOtp.deleteOne({ email });
+        return res.status(404).json({
+          success: false,
+          message: "Account not found"
+        });
+      }
+      updatedVendor = await Vendor.updateOne({ email }, { passwordHash: hash });
+    }
+
     await PasswordOtp.deleteOne({ email });
-    return res.json({ success: true, message: 'Password updated', user: user || vendor });
-  } catch (err) { next(err); }
+
+    return res.json({ success: true, message: 'Password updated', user: updatedUser || updatedVendor });
+  } catch (err) {
+    next(err);
+  }
 };
 
 exports.changePassword = async (req, res, next) => {
@@ -128,13 +190,23 @@ exports.changePassword = async (req, res, next) => {
 
 exports.resendOtp = async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { email, is_user } = req.body;
 
-    const user = await User.findOne({ email });
-    const vendor = await Vendor.findOne({ email });
+    let account = null;
+    let role = null;
 
-    if (!user && !vendor) {
-      return res.status(404).json({ success: false, message: "Email not registered" });
+    if (is_user === true) {
+      account = await User.findOne({ email });
+      role = "user";
+    } else {
+      account = await Vendor.findOne({ email });
+      role = "vendor";
+    }
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found"
+      });
     }
 
     const otp = generateOtp(4);
@@ -142,7 +214,7 @@ exports.resendOtp = async (req, res, next) => {
 
     await PasswordOtp.findOneAndUpdate(
       { email },
-      { email, otp, expires_at },
+      { email, otp, role, expires_at },
       { upsert: true, new: true }
     );
 

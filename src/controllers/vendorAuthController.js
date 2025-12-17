@@ -19,6 +19,7 @@ const ObjectId = mongoose.Types.ObjectId;
 exports.vendorSignupRequestOtp = async (req, res, next) => {
   try {
     const { name, email, password, phone, vendor_type } = req.body;
+    let role = "vendor";
 
     // Email uniqueness
     const exists = await Vendor.findOne({ email });
@@ -41,7 +42,7 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
 
     await PasswordOtp.findOneAndUpdate(
       { email },
-      { email, otp, expires_at },
+      { email, otp, role, expires_at },
       { upsert: true }
     );
 
@@ -79,8 +80,14 @@ exports.vendorSignupVerify = async (req, res, next) => {
     if (vendor.verified === true)
       return res.status(400).json({ error: "Already verified" });
 
-    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });;
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });
 
+    if (doc.role !== "vendor") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP"
+      });
+    }
     if (!doc) return res.status(400).json({ error: 'Invalid OTP' });
     if (doc.expires_at < Date.now()) return res.status(400).json({ error: 'OTP expired' });
     if (doc.otp !== String(otp)) return res.status(400).json({ error: 'Incorrect OTP' });
@@ -128,9 +135,10 @@ exports.login = async (req, res, next) => {
     const { email, password } = req.body;
 
     const vendor = await Vendor.findOne({ email });
-    if (!vendor || !vendor.passwordHash) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    if (!vendor) return res.status(401).json({ error: 'Account not found' });
+
+    const match = await passwordService.comparePassword(password, vendor.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
     // Block login if not verified
     if (!vendor.verified) {
@@ -406,6 +414,7 @@ exports.requestEmailOtp = async (req, res, next) => {
   try {
     const vendorId = req.user.id;
     const { email } = req.body;
+    let role = "vendor";
 
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
@@ -418,7 +427,7 @@ exports.requestEmailOtp = async (req, res, next) => {
 
     await PasswordOtp.findOneAndUpdate(
       { email },
-      { email, otp, expires_at },
+      { email, otp, role, expires_at },
       { upsert: true }
     );
 
@@ -454,7 +463,13 @@ exports.verifyEmailOtp = async (req, res, next) => {
     if (vendor.email !== email)
       return res.status(400).json({ error: 'Old email incorrect' });
 
-    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });;
+    const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });
+    if (doc.role !== "vendor") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP"
+      });
+    }
     if (!doc) return res.status(400).json({ error: 'OTP invalid' });
     if (doc.expires_at < Date.now()) return res.status(400).json({ error: 'OTP expired' });
     if (doc.otp !== String(otp)) return res.status(400).json({ error: 'OTP incorrect' });
