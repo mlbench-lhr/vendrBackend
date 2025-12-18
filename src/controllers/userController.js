@@ -235,7 +235,7 @@ exports.getUserProfile = async (req, res) => {
         );
 
         if (!user) {
-             return res.status(404).json({ success: false, message: "User not found" });
+            return res.status(404).json({ success: false, message: "User not found" });
         }
 
         // Get favorite vendor IDs
@@ -341,7 +341,8 @@ const getTodaysHoursCount = (hours) => {
 
 exports.searchVendors = async (req, res, next) => {
     try {
-        const { query = "" } = req.query;
+        const { query = "", lat, lng, distance } = req.query;
+        // ✅ Mandatory validations
         if (!query.trim()) {
             return res.status(400).json({
                 success: false,
@@ -349,6 +350,16 @@ exports.searchVendors = async (req, res, next) => {
             });
         }
 
+        if (!lat || !lng || !distance) {
+            return res.status(400).json({
+                success: false,
+                message: "lat, lng and distance are required"
+            });
+        }
+
+        const userLat = parseFloat(lat);
+        const userLng = parseFloat(lng);
+        const maxDistance = parseFloat(distance);
         const text = query.trim();
 
         // 1️⃣ Vendors matching by vendor name, vendor type, shop address
@@ -385,21 +396,31 @@ exports.searchVendors = async (req, res, next) => {
             _id: { $in: uniqueVendorIds }
         }).select("name profile_image vendor_type shop_address lat lng");
 
-        // Add additional info: total menus + today's hours
-        const enrichedVendors = await Promise.all(
-            vendors.map(async (vendor) => {
-                const totalMenus = await Menu.countDocuments({ vendor_id: vendor._id });
+        // 5️⃣ Distance filter + enrichment
+        const enrichedVendors = [];
 
-                const hours = await VendorHours.findOne({ vendor_id: vendor._id });
-                const todaysHoursCount = getTodaysHoursCount(hours);
+        for (const vendor of vendors) {
+            const vendorDistance = calculateDistanceKm(
+                userLat,
+                userLng,
+                vendor.lat,
+                vendor.lng
+            );
 
-                return {
-                    ...vendor.toObject(),
-                    total_menus: totalMenus,
-                    todays_hours_count: todaysHoursCount
-                };
-            })
-        );
+            // ❌ Exclude outside radius
+            if (vendorDistance > maxDistance) continue;
+
+            const totalMenus = await Menu.countDocuments({ vendor_id: vendor._id });
+            const hours = await VendorHours.findOne({ vendor_id: vendor._id });
+            const todaysHoursCount = getTodaysHoursCount(hours);
+
+            enrichedVendors.push({
+                ...vendor.toObject(),
+                distance_in_km: Number(vendorDistance.toFixed(1)),
+                total_menus: totalMenus,
+                todays_hours_count: todaysHoursCount
+            });
+        }
 
         return res.json({
             success: true,
@@ -416,6 +437,21 @@ exports.searchVendors = async (req, res, next) => {
         });
     }
 };
+
+const calculateDistanceKm = (lat1, lng1, lat2, lng2) => {
+    const R = 6371; // Earth radius in KM
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) ** 2;
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 
 
 
