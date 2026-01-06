@@ -70,7 +70,7 @@ exports.vendorEditProfileSchema = () =>
   Joi.object({
     name: Joi.string().optional(),
     vendor_type: Joi.string().optional(),
-    shop_address: Joi.string().optional(),
+    shop_address: Joi.string().optional().allow(null, ""),
     profile_image: Joi.string().uri().optional(),
     lat: Joi.number().allow(null),
     lng: Joi.number().allow(null),
