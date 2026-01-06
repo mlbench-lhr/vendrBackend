@@ -116,7 +116,7 @@ exports.getReviews = async (req, res) => {
                 return {
                     _id: r._id,
                     vendor_id: r.vendor_id,
-                    user_id: userObj,
+                    user: userObj,
                     rating: r.rating,
                     message: r.message,
                     created_at: r.created_at
