@@ -222,12 +222,12 @@ exports.oauth=async (req, res, next)=> {
     const payload = {
       id: user._id.toString(),
       email: user.email,
-      role: 'user',
+      role: 'vendor'
     };
 
     return res.json({
       success: true,
-      user: {
+      vendor: {
         id: user._id,
         name: user.name,
         email: user.email,
