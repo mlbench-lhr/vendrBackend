@@ -5,6 +5,7 @@ const jwtService = require('../services/jwtService');
 const logger = require('../utils/logger');
 const { generateOtp } = require('../services/passwordService');
 const { sendEmail } = require('../emails/sendEmail');
+const { OAuth2Client } = require('google-auth-library');
 /*
 |--------------------------------------------------------------------------
 | USER REGISTER
@@ -168,22 +169,49 @@ async function login(req, res, next) {
 | USER OAUTH (Google / Apple)
 |--------------------------------------------------------------------------
 */
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 async function oauth(req, res, next) {
   try {
-    const { provider, provider_id, email, name } = req.body;
+    const { provider, provider_id } = req.body; // remove email/name from client
 
-    let user = await User.findOne({ provider, provider_id });
+    if (provider !== 'google') {
+      return res.status(400).json({ success: false, message: 'Unsupported provider' });
+    }
 
+    // ✅ Validate Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: provider_id,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const googlePayload = ticket.getPayload();
+    if (!googlePayload) {
+      return res.status(401).json({ success: false, message: 'Invalid Google token' });
+    }
+
+    // Use Google info directly
+    const email = googlePayload.email;
+    const name = googlePayload.name;
+    const profile_image = googlePayload.picture;
+    const googleId = googlePayload.sub; // unique Google user ID
+
+    // Find or create user
+    let user = await User.findOne({ provider, provider_id: googleId });
     if (!user) {
       user = await User.create({
         provider,
-        provider_id,
+        provider_id: googleId,
         email,
-        name
+        name,
+        profile_image
       });
     }
 
-    const payload = { id: user._id.toString(), email: user.email, role: 'user' };
+    const payload = {
+      id: user._id.toString(),
+      email: user.email,
+      role: 'user',
+    };
 
     return res.json({
       success: true,
@@ -191,13 +219,14 @@ async function oauth(req, res, next) {
         id: user._id,
         name: user.name,
         email: user.email,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        profile_image
       },
       tokens: {
         accessToken: jwtService.signAccess(payload),
         refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m'
-      }
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m',
+      },
     });
 
   } catch (err) {

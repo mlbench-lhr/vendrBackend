@@ -13,6 +13,7 @@ const cloudinary = require('../config/cloudinary');
 const { generateOtp } = require('../services/passwordService');
 const { sendEmail } = require('../emails/sendEmail');
 const mongoose = require("mongoose");
+const { OAuth2Client } = require('google-auth-library');
 const ObjectId = mongoose.Types.ObjectId;
 
 // EMAIL REGISTRATION
@@ -179,42 +180,66 @@ exports.login = async (req, res, next) => {
 };
 
 // OAUTH
-exports.oauth = async (req, res, next) => {
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+exports.oauth=async (req, res, next)=> {
   try {
-    const { provider, token } = req.body;
+    const { provider, provider_id } = req.body; // remove email/name from client
 
-    let verified;
-
-    if (provider === 'google') {
-      verified = await oauthService.verifyGoogleToken(token);
+    if (provider !== 'google') {
+      return res.status(400).json({ success: false, message: 'Unsupported provider' });
     }
-    const provider_id = verified.sub;
-    const email = verified.email;
-    const name = verified.name;
 
-    let vendor = await Vendor.findOne({ provider, provider_id });
+    // ✅ Validate Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: provider_id,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
 
-    if (!vendor) {
-      vendor = await Vendor.create({
+    const googlePayload = ticket.getPayload();
+    if (!googlePayload) {
+      return res.status(401).json({ success: false, message: 'Invalid Google token' });
+    }
+
+    // Use Google info directly
+    const email = googlePayload.email;
+    const name = googlePayload.name;
+    const profile_image = googlePayload.picture;
+    const googleId = googlePayload.sub; // unique Google user ID
+
+    // Find or create user
+    let user = await Vendor.findOne({ provider, provider_id: googleId });
+    if (!user) {
+      user = await Vendor.create({
         provider,
-        provider_id,
+        provider_id: googleId,
         email,
-        name
+        name,
+        profile_image,
+        vendor_type: "Other"
       });
     }
 
-    const payload = { id: vendor._id.toString(), email: vendor.email, role: 'vendor' };
-
-    const accessToken = jwtService.signAccess(payload);
-    const refreshToken = jwtService.signRefresh(payload);
+    const payload = {
+      id: user._id.toString(),
+      email: user.email,
+      role: 'user',
+    };
 
     return res.json({
-      vendor,
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        profile_image,
+        vendor_type: user.vendor_type
+      },
       tokens: {
-        accessToken,
-        refreshToken,
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m'
-      }
+        accessToken: jwtService.signAccess(payload),
+        refreshToken: jwtService.signRefresh(payload),
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m',
+      },
     });
   } catch (err) {
     logger.error('Vendor OAuth error', err);

@@ -18,8 +18,8 @@ exports.userOauthSchema = () =>
   Joi.object({
     provider: Joi.string().required(),
     provider_id: Joi.string().required(),
-    email: Joi.string().email().required(),
-    name: Joi.string().required(),
+    email: Joi.string().email().optional().allow(""),
+    name: Joi.string().optional().allow(""),
   });
 
 // VENDOR
@@ -41,7 +41,7 @@ exports.vendorLoginSchema = () =>
 exports.vendorOauthSchema = () =>
   Joi.object({
     provider: Joi.string().required(),
-    token: Joi.string().required(),
+    provider_id: Joi.string().required(),
   });
 
 // PASSWORD RESET
