@@ -11,6 +11,7 @@
     "node": ">=14"
   },
   "dependencies": {
+    "apple-signin-auth": "^1.7.5",
     "bcrypt": "^5.1.0",
     "cloudinary": "^1.41.3",
     "dotenv": "^16.6.1",

@@ -1,11 +1,12 @@
-const User = require('../models/User');
-const PasswordOtp = require('../models/PasswordOtp');
-const passwordService = require('../services/passwordService');
-const jwtService = require('../services/jwtService');
-const logger = require('../utils/logger');
-const { generateOtp } = require('../services/passwordService');
-const { sendEmail } = require('../emails/sendEmail');
-const { OAuth2Client } = require('google-auth-library');
+const User = require("../models/User");
+const PasswordOtp = require("../models/PasswordOtp");
+const passwordService = require("../services/passwordService");
+const jwtService = require("../services/jwtService");
+const logger = require("../utils/logger");
+const { generateOtp } = require("../services/passwordService");
+const { sendEmail } = require("../emails/sendEmail");
+const { OAuth2Client } = require("google-auth-library");
+const appleSignin = require("apple-signin-auth");
 /*
 |--------------------------------------------------------------------------
 | USER REGISTER
@@ -17,7 +18,8 @@ async function userSignupRequestOtp(req, res, next) {
     let role = "user";
 
     const existing = await User.findOne({ email });
-    if (existing) return res.status(409).json({ error: "Email already registered" });
+    if (existing)
+      return res.status(409).json({ error: "Email already registered" });
 
     const passwordHash = await passwordService.hashPassword(password);
 
@@ -26,7 +28,7 @@ async function userSignupRequestOtp(req, res, next) {
       email,
       passwordHash,
       provider: "email",
-      verified: false
+      verified: false,
     });
 
     const otp = generateOtp(4);
@@ -50,17 +52,16 @@ async function userSignupRequestOtp(req, res, next) {
     return res.json({
       success: true,
       message: "OTP sent to email",
-      user_id: user._id
+      user_id: user._id,
     });
-
   } catch (err) {
     return res.status(500).json({
       success: false,
       message: "User signup request failed",
-      error: err.message
+      error: err.message,
     });
   }
-};
+}
 
 async function userSignupVerify(req, res, next) {
   try {
@@ -69,17 +70,19 @@ async function userSignupVerify(req, res, next) {
 
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: "User not found" });
-    if (user.verified) return res.status(400).json({ error: "Already verified" });
+    if (user.verified)
+      return res.status(400).json({ error: "Already verified" });
 
     const doc = await PasswordOtp.findOne({ email }).sort({ createdAt: -1 });
     if (doc.role !== role) {
       return res.status(400).json({
         success: false,
-        message: "Invalid OTP"
+        message: "Invalid OTP",
       });
     }
     if (!doc) return res.status(400).json({ error: "Invalid OTP" });
-    if (doc.expires_at < Date.now()) return res.status(400).json({ error: "OTP expired" });
+    if (doc.expires_at < Date.now())
+      return res.status(400).json({ error: "OTP expired" });
     if (String(doc.otp).trim() !== String(otp).trim())
       return res.status(400).json({ error: "Incorrect OTP" });
 
@@ -88,7 +91,11 @@ async function userSignupVerify(req, res, next) {
 
     await PasswordOtp.deleteOne({ email });
 
-    const payload = { id: user._id.toString(), email: user.email, role: "user" };
+    const payload = {
+      id: user._id.toString(),
+      email: user.email,
+      role: "user",
+    };
     const accessToken = jwtService.signAccess(payload);
     const refreshToken = jwtService.signRefresh(payload);
 
@@ -99,24 +106,22 @@ async function userSignupVerify(req, res, next) {
         name: user.name,
         email: user.email,
         verified: user.verified,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
       },
       tokens: {
         accessToken,
         refreshToken,
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m"
-      }
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+      },
     });
-
   } catch (err) {
     return res.status(500).json({
       success: false,
       message: "OTP verification failed",
-      error: err.message
+      error: err.message,
     });
   }
-};
-
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -129,20 +134,28 @@ async function login(req, res, next) {
 
     const user = await User.findOne({ email });
 
-    if (!user) return res.status(401).json({ error: 'Account not found' });
+    if (!user) return res.status(401).json({ error: "Account not found" });
 
-    const match = await passwordService.comparePassword(password, user.passwordHash);
-    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+    const match = await passwordService.comparePassword(
+      password,
+      user.passwordHash
+    );
+    if (!match) return res.status(401).json({ error: "Invalid credentials" });
 
     // Block login if not verified
     if (!user.verified) {
       return res.status(403).json({
         success: false,
-        message: "Your account is not verified. Please verify your email to continue."
+        message:
+          "Your account is not verified. Please verify your email to continue.",
       });
     }
 
-    const payload = { id: user._id.toString(), email: user.email, role: 'user' };
+    const payload = {
+      id: user._id.toString(),
+      email: user.email,
+      role: "user",
+    };
 
     return res.json({
       success: true,
@@ -150,16 +163,16 @@ async function login(req, res, next) {
         id: user._id,
         name: user.name,
         email: user.email,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
       },
       tokens: {
         accessToken: jwtService.signAccess(payload),
         refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m'
-      }
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+      },
     });
   } catch (err) {
-    logger.error('Login error', err);
+    logger.error("Login error", err);
     next(err);
   }
 }
@@ -172,45 +185,91 @@ async function login(req, res, next) {
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 async function oauth(req, res, next) {
   try {
-    const { provider, provider_id } = req.body; // remove email/name from client
+    const {
+      provider,
+      provider_id,
+      email: emailFromBody,
+      name: nameFromBody,
+    } = req.body;
 
-    if (provider !== 'google') {
-      return res.status(400).json({ success: false, message: 'Unsupported provider' });
+    let email;
+    let name;
+    let profile_image = null;
+    let providerUserId;
+
+    if (provider === "google") {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: provider_id,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+
+      const googlePayload = ticket.getPayload();
+      if (!googlePayload) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Invalid Google token" });
+      }
+
+      email = googlePayload.email;
+      name = googlePayload.name || emailFromBody || "";
+      profile_image = googlePayload.picture || null;
+      providerUserId = googlePayload.sub;
+    } else if (provider === "apple") {
+      const applePayload = await appleSignin.verifyIdToken(provider_id, {
+        audience: process.env.APPLE_CLIENT_ID,
+        ignoreExpiration: false,
+      });
+
+      if (!applePayload) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Invalid Apple token" });
+      }
+
+      email = applePayload.email || emailFromBody || null;
+
+      const givenName = applePayload.given_name;
+      const familyName = applePayload.family_name;
+
+      if (nameFromBody) {
+        name = nameFromBody;
+      } else if (givenName || familyName) {
+        name = [givenName, familyName].filter(Boolean).join(" ");
+      } else if (email) {
+        name = email.split("@")[0];
+      } else {
+        name = "";
+      }
+
+      profile_image = null;
+      providerUserId = applePayload.sub;
+    } else {
+      return res
+        .status(400)
+        .json({ success: false, message: "Unsupported provider" });
     }
 
-    // ✅ Validate Google ID token
-    const ticket = await googleClient.verifyIdToken({
-      idToken: provider_id,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-
-    const googlePayload = ticket.getPayload();
-    if (!googlePayload) {
-      return res.status(401).json({ success: false, message: 'Invalid Google token' });
+    if (!email) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email not available from provider" });
     }
 
-    // Use Google info directly
-    const email = googlePayload.email;
-    const name = googlePayload.name;
-    const profile_image = googlePayload.picture;
-    const googleId = googlePayload.sub; // unique Google user ID
-
-    // Find or create user
-    let user = await User.findOne({ provider, provider_id: googleId });
+    let user = await User.findOne({ provider, provider_id: providerUserId });
     if (!user) {
       user = await User.create({
         provider,
-        provider_id: googleId,
+        provider_id: providerUserId,
         email,
         name,
-        profile_image
+        profile_image,
       });
     }
 
     const payload = {
       id: user._id.toString(),
       email: user.email,
-      role: 'user',
+      role: "user",
     };
 
     return res.json({
@@ -220,17 +279,16 @@ async function oauth(req, res, next) {
         name: user.name,
         email: user.email,
         createdAt: user.createdAt,
-        profile_image
+        profile_image: user.profile_image,
       },
       tokens: {
         accessToken: jwtService.signAccess(payload),
         refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m',
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
       },
     });
-
   } catch (err) {
-    logger.error('OAuth error', err);
+    logger.error("OAuth error", err);
     next(err);
   }
 }
@@ -243,30 +301,34 @@ async function oauth(req, res, next) {
 async function refresh(req, res, next) {
   try {
     const { refreshToken } = req.body;
-    if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });
+    if (!refreshToken)
+      return res.status(400).json({ error: "refreshToken required" });
 
     let decoded;
     try {
       decoded = jwtService.verifyRefresh(refreshToken);
     } catch {
-      return res.status(401).json({ error: 'Invalid refresh token' });
+      return res.status(401).json({ error: "Invalid refresh token" });
     }
 
     const user = await User.findById(decoded.id);
-    if (!user) return res.status(401).json({ error: 'User not found' });
+    if (!user) return res.status(401).json({ error: "User not found" });
 
-    const payload = { id: user._id.toString(), email: user.email, role: 'user' };
+    const payload = {
+      id: user._id.toString(),
+      email: user.email,
+      role: "user",
+    };
 
     return res.json({
       tokens: {
         accessToken: jwtService.signAccess(payload),
         refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || '15m'
-      }
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+      },
     });
-
   } catch (err) {
-    logger.error('Refresh error', err);
+    logger.error("Refresh error", err);
     next(err);
   }
 }
@@ -280,21 +342,28 @@ async function logout(req, res, next) {
   try {
     const { refreshToken } = req.body;
 
-    if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });
+    if (!refreshToken)
+      return res.status(400).json({ error: "refreshToken required" });
 
     try {
       jwtService.verifyRefresh(refreshToken);
     } catch {
-      return res.status(400).json({ error: 'Invalid refresh token' });
+      return res.status(400).json({ error: "Invalid refresh token" });
     }
 
     // No blacklist implemented — stateless logout
-    return res.json({ message: 'User Logged out' });
-
+    return res.json({ message: "User Logged out" });
   } catch (err) {
-    logger.error('Logout error', err);
+    logger.error("Logout error", err);
     next(err);
   }
 }
 
-module.exports = { userSignupRequestOtp, userSignupVerify, login, oauth, refresh, logout };
+module.exports = {
+  userSignupRequestOtp,
+  userSignupVerify,
+  login,
+  oauth,
+  refresh,
+  logout,
+};
