@@ -266,14 +266,27 @@ exports.oauth = async (req, res, next) => {
 
     let user = await Vendor.findOne({ provider, provider_id: providerUserId });
     if (!user) {
-      user = await Vendor.create({
-        provider,
-        provider_id: providerUserId,
-        email,
-        name,
-        profile_image,
-        vendor_type: "Other",
-      });
+      user = await Vendor.findOne({ email });
+      if (user) {
+        user.provider = provider;
+        user.provider_id = providerUserId;
+        if (!user.name && name) {
+          user.name = name;
+        }
+        if (!user.profile_image && profile_image) {
+          user.profile_image = profile_image;
+        }
+        await user.save();
+      } else {
+        user = await Vendor.create({
+          provider,
+          provider_id: providerUserId,
+          email,
+          name,
+          profile_image,
+          vendor_type: "Other",
+        });
+      }
     }
 
     const payload = {
