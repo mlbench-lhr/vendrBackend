@@ -48,7 +48,8 @@ const VendorSchema = new Schema(
     shop_address: { type: String, default: null },
     lat: { type: Number, default: null },
     lng: { type: Number, default: null },
-    language: { type: String, default: "en" }
+    language: { type: String, default: "en" },
+    fcmDeviceTokens: [{ type: String, required: false }],
   },
   {
     timestamps: true,

@@ -225,6 +225,44 @@ exports.deleteAccount = async (req, res, next) => {
         });
     }
 };
+exports.updateFcmDeviceToken = async (req, res) => {
+    try {
+        const { userId, token, lat, lng } = req.body;
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        // update lat/lng only if provided (not undefined)
+        if (lat !== undefined) user.lat = lat ?? null;
+        if (lng !== undefined) user.lng = lng ?? null;
+
+        if (token) {
+            if (!Array.isArray(user.fcmDeviceTokens)) {
+                user.fcmDeviceTokens = [];
+            }
+
+            if (!user.fcmDeviceTokens.includes(token)) {
+                user.fcmDeviceTokens.push(token);
+            }
+        }
+
+        await user.save();
+
+        return res.json({
+            success: true,
+            user: user.toObject(),
+        });
+    } catch (err) {
+        console.error("Error updating FCM token:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message,
+        });
+    }
+};
 
 exports.getUserProfile = async (req, res) => {
     try {

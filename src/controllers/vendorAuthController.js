@@ -770,6 +770,44 @@ exports.getLanguage = async (req, res, next) => {
     });
   }
 };
+exports.updateFcmDeviceToken = async (req, res) => {
+  try {
+    const { userId, token, lat, lng } = req.body;
+
+    const user = await Vendor.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // update lat/lng only if provided (not undefined)
+    if (lat !== undefined) user.lat = lat ?? null;
+    if (lng !== undefined) user.lng = lng ?? null;
+
+    if (token) {
+      if (!Array.isArray(user.fcmDeviceTokens)) {
+        user.fcmDeviceTokens = [];
+      }
+
+      if (!user.fcmDeviceTokens.includes(token)) {
+        user.fcmDeviceTokens.push(token);
+      }
+    }
+
+    await user.save();
+
+    return res.json({
+      success: true,
+      user: user.toObject(),
+    });
+  } catch (err) {
+    console.error("Error updating FCM token:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: err.message,
+    });
+  }
+};
 
 //get vendor profile
 exports.getVendorProfile = async (req, res, next) => {
@@ -806,8 +844,8 @@ exports.getVendorProfile = async (req, res, next) => {
     const average_rating =
       total_reviews > 0
         ? (
-            reviews.reduce((sum, r) => sum + r.rating, 0) / total_reviews
-          ).toFixed(1)
+          reviews.reduce((sum, r) => sum + r.rating, 0) / total_reviews
+        ).toFixed(1)
         : 0;
 
     reviews = await Promise.all(

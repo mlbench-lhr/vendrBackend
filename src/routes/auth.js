@@ -42,6 +42,7 @@ router.get('/user/language', auth, userController.getLanguage);
 router.post('/reviews', auth, validateBody(schemas.addVendorReviewSchema), reviewController.addReview);
 router.delete('/reviews/:id', auth, validateParams(schemas.deleteVendorReviewSchema), reviewController.deleteReview);
 router.get('/reviews/:vendorId', validateParams(schemas.getVendorReviewsSchema), reviewController.getReviews);
+router.post('/user/save-token', userController.updateFcmDeviceToken);
 
 //delete user account
 router.delete('/user/delete-account', auth, userController.deleteAccount);
@@ -56,6 +57,7 @@ router.post('/vendor/refresh', vendorController.refresh);
 
 //get vendor profile
 router.get('/vendor/profile', auth, vendorController.getVendorProfile);
+router.post('/vendor/save-token', vendorController.updateFcmDeviceToken);
 router.get('/vendor/reviews', auth, vendorController.getVendorAllReviews);
 
 //vendor edit profile

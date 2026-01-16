@@ -13,6 +13,7 @@ const UserSchema = new Schema(
       trim: true,
     },
 
+    fcmDeviceTokens: [{ type: String, required: false }],
     passwordHash: {
       type: String,
       required: false, // OAuth users do NOT have a password
@@ -34,6 +35,8 @@ const UserSchema = new Schema(
     new_vendor_alert: { type: Boolean, default: false },
     distance_based_alert: { type: Boolean, default: false },
     favorite_vendor_alert: { type: Boolean, default: false },
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null },
   },
   {
     timestamps: true, // createdAt, updatedAt automatically
