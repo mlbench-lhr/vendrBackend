@@ -16,6 +16,7 @@ const mongoose = require("mongoose");
 const { OAuth2Client } = require("google-auth-library");
 const appleSignin = require("apple-signin-auth");
 const ObjectId = mongoose.Types.ObjectId;
+const { notifyUsersNearVendor } = require("../services/notificationService");
 
 // EMAIL REGISTRATION
 exports.vendorSignupRequestOtp = async (req, res, next) => {
@@ -389,6 +390,10 @@ exports.editProfile = async (req, res, next) => {
       new: true,
     });
 
+    if (updatedVendor && updatedVendor.lat != null && updatedVendor.lng != null) {
+      try { await notifyUsersNearVendor(updatedVendor); } catch (e) { }
+    }
+
     return res.json({
       success: true,
       message: "Profile updated successfully",
@@ -705,6 +710,12 @@ exports.setLocation = async (req, res, next) => {
       { upsert: true, new: true }
     );
 
+    if (mode === "fixed" && result?.fixed_location?.lat != null && result?.fixed_location?.lng != null) {
+      const vendor = await Vendor.findById(vendorId).select("name");
+      const v = { _id: vendor._id, name: vendor.name, lat: result.fixed_location.lat, lng: result.fixed_location.lng };
+      try { await notifyUsersNearVendor(v); } catch (e) { }
+    }
+
     return res.json({ success: true, location: result });
   } catch (err) {
     console.error("Set vendor Location Error:", err);
@@ -794,6 +805,10 @@ exports.updateFcmDeviceToken = async (req, res) => {
     }
 
     await user.save();
+
+    if (lat !== undefined && lng !== undefined && user.lat != null && user.lng != null) {
+      try { await notifyUsersNearVendor(user); } catch (e) { }
+    }
 
     return res.json({
       success: true,
