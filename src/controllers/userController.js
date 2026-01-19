@@ -8,7 +8,7 @@ const FavoriteVendor = require("../models/FavoriteVendor");
 const cloudinary = require('../config/cloudinary');
 const mongoose = require("mongoose");
 const { getUserLocationFromRtdb, getVendorLocationsFromRtdb } = require("../services/firebaseRtdbService");
-const { notifyUserNearbyVendorsNow } = require("../services/proximityAlertService");
+const { notifyUserNearbyVendorsNow, notifyUserFavoriteVendorsNow } = require("../services/proximityAlertService");
 const jwtService = require("../services/jwtService");
 
 function escapeRegex(text) {
@@ -43,7 +43,7 @@ exports.editProfile = async (req, res) => {
         const userId = req.user.id; // from auth middleware
         const { name, profile_image, new_vendor_alert, distance_based_alert, favorite_vendor_alert } = req.body;
 
-        const existingUser = await User.findById(userId).select("distance_based_alert").lean();
+        const existingUser = await User.findById(userId).select("distance_based_alert favorite_vendor_alert new_vendor_alert").lean();
 
         let updateData = {};
         if (name) updateData.name = name;
@@ -70,7 +70,17 @@ exports.editProfile = async (req, res) => {
             distance_based_alert === true &&
             !existingUser?.distance_based_alert;
 
-        if (distanceAlertTurnedOn) {
+        const favoriteAlertTurnedOn =
+            typeof favorite_vendor_alert === "boolean" &&
+            favorite_vendor_alert === true &&
+            !existingUser?.favorite_vendor_alert;
+
+        const newVendorAlertTurnedOn =
+            typeof new_vendor_alert === "boolean" &&
+            new_vendor_alert === true &&
+            !existingUser?.new_vendor_alert;
+
+        if (distanceAlertTurnedOn || favoriteAlertTurnedOn || newVendorAlertTurnedOn) {
             const loc = await getUserLocationFromRtdb(userId);
             if (loc?.lat != null && loc?.lng != null) {
                 updateData.lat = loc.lat;
@@ -96,6 +106,13 @@ exports.editProfile = async (req, res) => {
             const radiusKm = Number(process.env.PROXIMITY_ALERT_RADIUS_KM || 5);
             notifyUserNearbyVendorsNow(userId, radiusKm).catch((err) => {
                 console.error("Distance-based notify on toggle failed:", err);
+            });
+        }
+
+        if (favoriteAlertTurnedOn) {
+            const radiusKm = Number(process.env.PROXIMITY_ALERT_RADIUS_KM || 5);
+            notifyUserFavoriteVendorsNow(userId, radiusKm).catch((err) => {
+                console.error("Favourite-vendor notify on toggle failed:", err);
             });
         }
 
