@@ -46,34 +46,69 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
   }).select("fcmDeviceTokens lat lng").lean();
   console.log("[new_vendor_alert] candidateUsers", { count: users.length });
 
+  if (!users.length) {
+    logger.info("Nearby vendor notifications: no candidate users", { vendorId: vendor._id.toString() });
+    return;
+  }
+
   const title = "New vendor near you";
   const name = vendor.name || "A vendor";
   const body = `${name} is within ${radiusKm} km of you`;
 
   const tasks = [];
+  let inRadiusUsers = 0;
+  let persistedNotifications = 0;
+  let pushAttempts = 0;
 
   for (const u of users) {
     const distance = calculateDistanceKm(u.lat, u.lng, coords.lat, coords.lng);
-    if (distance <= radiusKm) {
-      const tokens = (u.fcmDeviceTokens || []).filter(Boolean);
-      if (tokens.length) {
-        console.log("[new_vendor_alert] userInRadius", { userId: u._id.toString(), vendorId: vendor._id.toString(), distanceKm: Number(distance.toFixed(3)), tokens: tokens.length });
-        tasks.push(Notification.create({
-          user_id: u._id,
-          vendor_id: vendor._id,
-          title,
-          body,
-        }));
-        for (const t of tokens) {
-          tasks.push(sendAlert(t, title, body, { vendorId: vendor._id.toString() }));
-        }
-      }
+    if (distance > radiusKm) continue;
+
+    inRadiusUsers += 1;
+    const tokens = (u.fcmDeviceTokens || []).filter(Boolean);
+
+    console.log("[new_vendor_alert] userInRadius", {
+      userId: u._id.toString(),
+      vendorId: vendor._id.toString(),
+      distanceKm: Number(distance.toFixed(3)),
+      tokens: tokens.length,
+    });
+
+    tasks.push(Notification.create({ user_id: u._id, vendor_id: vendor._id, title, body }));
+    persistedNotifications += 1;
+
+    for (const t of tokens) {
+      pushAttempts += 1;
+      tasks.push(sendAlert(t, title, body, { vendorId: vendor._id.toString() }));
     }
   }
 
-  if (tasks.length) {
-    await Promise.all(tasks);
-    logger.info("Nearby vendor notifications sent", { vendorId: vendor._id, tasks: tasks.length });
+  if (!tasks.length) {
+    logger.info("Nearby vendor notifications: no users in radius", {
+      vendorId: vendor._id.toString(),
+      radiusKm,
+      candidateUsers: users.length,
+    });
+    return;
+  }
+
+  const results = await Promise.allSettled(tasks);
+  const rejected = results.filter((r) => r.status === "rejected");
+
+  logger.info("Nearby vendor notifications: processed", {
+    vendorId: vendor._id.toString(),
+    radiusKm,
+    candidateUsers: users.length,
+    inRadiusUsers,
+    persistedNotifications,
+    pushAttempts,
+    tasks: tasks.length,
+    failedTasks: rejected.length,
+  });
+
+  if (rejected.length) {
+    const sample = rejected[0]?.reason;
+    logger.error("Nearby vendor notifications: failures detected", sample);
   }
 }
 
