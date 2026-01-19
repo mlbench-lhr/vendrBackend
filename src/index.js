@@ -4,6 +4,7 @@ const http = require('http');
 const app = require('./app');
 const connectDB = require('./db/mongo');
 const logger = require('./utils/logger');
+const { startVendorProximityPoller } = require('./services/proximityAlertService');
 
 const PORT = process.env.PORT || 3000;
 
@@ -11,7 +12,10 @@ const PORT = process.env.PORT || 3000;
   try {
     await connectDB(process.env.MONGO_URI);
     const server = http.createServer(app);
-    server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+    server.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT}`);
+      startVendorProximityPoller();
+    });
 
     process.on('unhandledRejection', (err) => {
       logger.error('Unhandled Rejection', err);

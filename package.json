@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "test:smoke": "node -e \"const assert=require('assert'); const jwtService=require('./src/services/jwtService'); const auth=require('./src/middleware/auth'); const run=(payload)=>{ jwtService.verifyAccess=()=>payload; const req={headers:{authorization:'Bearer t'}}; const res={statusCode:200,status(n){this.statusCode=n;return this;},json(b){this.body=b;return this;}}; let nextCalled=false; auth(req,res,()=>{nextCalled=true;}); return {req,res,nextCalled}; }; { const r=run({id:'id123',email:'a@b.com',role:'user'}); assert(r.nextCalled); assert.strictEqual(r.req.user.id,'id123'); } { const r=run({userId:'uid123',email:'a@b.com',role:'user'}); assert(r.nextCalled); assert.strictEqual(r.req.user.id,'uid123'); } console.log('ok');\""
   },
   "engines": {
     "node": ">=14"

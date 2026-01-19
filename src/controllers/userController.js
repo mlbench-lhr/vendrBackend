@@ -6,11 +6,16 @@ const VendorReview = require("../models/VendorReview");
 const User = require("../models/User");
 const FavoriteVendor = require("../models/FavoriteVendor");
 const cloudinary = require('../config/cloudinary');
+const mongoose = require("mongoose");
+const { getUserLocationFromRtdb, getVendorLocationsFromRtdb } = require("../services/firebaseRtdbService");
+const { notifyUserNearbyVendorsNow } = require("../services/proximityAlertService");
 
 exports.editProfile = async (req, res) => {
     try {
         const userId = req.user.id; // from auth middleware
         const { name, profile_image, new_vendor_alert, distance_based_alert, favorite_vendor_alert } = req.body;
+
+        const existingUser = await User.findById(userId).select("distance_based_alert").lean();
 
         let updateData = {};
         if (name) updateData.name = name;
@@ -32,6 +37,19 @@ exports.editProfile = async (req, res) => {
             updateData.favorite_vendor_alert = favorite_vendor_alert;
         }
 
+        const distanceAlertTurnedOn =
+            typeof distance_based_alert === "boolean" &&
+            distance_based_alert === true &&
+            !existingUser?.distance_based_alert;
+
+        if (distanceAlertTurnedOn) {
+            const loc = await getUserLocationFromRtdb(userId);
+            if (loc?.lat != null && loc?.lng != null) {
+                updateData.lat = loc.lat;
+                updateData.lng = loc.lng;
+            }
+        }
+
         // Update user record
         const updatedUser = await User.findByIdAndUpdate(
             userId,
@@ -43,6 +61,13 @@ exports.editProfile = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "User not found"
+            });
+        }
+
+        if (distanceAlertTurnedOn) {
+            const radiusKm = Number(process.env.PROXIMITY_ALERT_RADIUS_KM || 5);
+            notifyUserNearbyVendorsNow(userId, radiusKm).catch((err) => {
+                console.error("Distance-based notify on toggle failed:", err);
             });
         }
 
@@ -266,18 +291,42 @@ exports.updateFcmDeviceToken = async (req, res) => {
 
 exports.getUserProfile = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user?.id;
+        const email = req.user?.email;
+        const role = req.user?.role;
 
-        const user = await User.findById(userId).select(
-            "name email profile_image new_vendor_alert distance_based_alert favorite_vendor_alert"
-        );
+        if (role === "vendor") {
+            const vendor = (userId ? await Vendor.findById(userId) : null) || (email ? await Vendor.findOne({ email }) : null);
+            if (!vendor) {
+                return res.status(404).json({ success: false, message: "User not found" });
+            }
+
+            return res.json({
+                success: true,
+                user: {
+                    name: vendor.name,
+                    email: vendor.email,
+                    profile_image: vendor.profile_image,
+                    new_vendor_alert: false,
+                    distance_based_alert: false,
+                    favorite_vendor_alert: false,
+                    favoriteVendors: []
+                }
+            });
+        }
+
+        const user =
+            (userId ? await User.findById(userId) : null) ||
+            (email ? await User.findOne({ email }) : null);
 
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
+        const resolvedUserId = user._id.toString();
+
         // Get favorite vendor IDs
-        const favorites = await FavoriteVendor.find({ userId }).lean();
+        const favorites = await FavoriteVendor.find({ userId: resolvedUserId }).lean();
         const vendorIds = favorites.map(f => f.vendorId);
 
         // Fetch vendor details
@@ -352,6 +401,150 @@ exports.getNearbyVendors = async (req, res, next) => {
     } catch (err) {
         console.error("Get Nearby Vendors Error:", err);
         return res.status(500).json({ success: false, message: "Something went wrong", error: err.message });
+    }
+};
+
+exports.getNearbyVendorsRealtime = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { maxDistance = 5, lat, lng } = req.query;
+
+        const maxDistanceKm = parseFloat(maxDistance);
+
+        const user = await User.findById(userId).select("lat lng").lean();
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        
+        let userLat = null;
+        let userLng = null;
+        
+        // Get user location from query params or RTDB or DB
+        if (lat != null && lng != null) {
+            userLat = parseFloat(lat);
+            userLng = parseFloat(lng);
+            if (Number.isFinite(userLat) && Number.isFinite(userLng)) {
+                try {
+                    await User.updateOne({ _id: userId }, { $set: { lat: userLat, lng: userLng } });
+                } catch (e) { }
+            }
+        } else {
+            const rtdbLoc = await getUserLocationFromRtdb(userId);
+            if (rtdbLoc?.lat != null && rtdbLoc?.lng != null) {
+                userLat = parseFloat(rtdbLoc.lat);
+                userLng = parseFloat(rtdbLoc.lng);
+            } else {
+                userLat = parseFloat(user.lat);
+                userLng = parseFloat(user.lng);
+            }
+        }
+
+        const isValidLatLng = (a, b) =>
+            Number.isFinite(a) && Number.isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180;
+
+        if (!isValidLatLng(userLat, userLng)) {
+            return res.status(400).json({ success: false, message: "User location not available" });
+        }
+
+        // Get live vendor locations from RTDB
+        const vendorLocations = await getVendorLocationsFromRtdb();
+        if (!vendorLocations.length) {
+            return res.json({
+                success: true,
+                user_location: { lat: userLat, lng: userLng },
+                count: 0,
+                vendors: []
+            });
+        }
+
+        // Map vendor IDs to their live locations
+        const liveLocationByVendorId = new Map();
+        const vendorIds = [];
+        
+        for (const v of vendorLocations) {
+            const id = String(v.vendorId);
+            if (!mongoose.Types.ObjectId.isValid(id)) continue;
+            
+            const vLat = parseFloat(v.lat);
+            const vLng = parseFloat(v.lng);
+            
+            if (!isValidLatLng(vLat, vLng)) continue;
+            
+            if (!liveLocationByVendorId.has(id)) {
+                liveLocationByVendorId.set(id, { lat: vLat, lng: vLng });
+                vendorIds.push(id);
+            }
+        }
+
+        if (!vendorIds.length) {
+            return res.json({
+                success: true,
+                user_location: { lat: userLat, lng: userLng },
+                count: 0,
+                vendors: []
+            });
+        }
+
+        // Fetch vendor details from DB
+        const vendors = await Vendor.find({ _id: { $in: vendorIds } }).select(
+            "name profile_image vendor_type shop_address lat lng"
+        );
+
+        // Calculate distances and prepare response
+        const vendorsWithDistance = await Promise.all(
+            vendors.map(async (vendor) => {
+                const vendorIdStr = vendor._id.toString();
+                const live = liveLocationByVendorId.get(vendorIdStr);
+                
+                if (!live) return null;
+
+                // Use the live location coordinates for distance calculation
+                const vendorLat = live.lat;
+                const vendorLng = live.lng;
+                
+                // Calculate distance using live coordinates
+                const distanceKm = calculateDistanceKm(userLat, userLng, vendorLat, vendorLng);
+                
+                // Get menu count and hours
+                const totalMenus = await Menu.countDocuments({ vendor_id: vendor._id });
+                const hours = await VendorHours.findOne({ vendor_id: vendor._id });
+                const todaysHoursCount = getTodaysHoursCount(hours);
+
+                return {
+                    _id: vendor._id,
+                    name: vendor.name,
+                    vendor_type: vendor.vendor_type,
+                    profile_image: vendor.profile_image,
+                    shop_address: vendor.shop_address,
+                    lat: vendorLat,  // Return live coordinates
+                    lng: vendorLng,  // Return live coordinates
+                    total_menus: totalMenus,
+                    todays_hours_count: todaysHoursCount,
+                    distance_in_km: Number(distanceKm.toFixed(1)),
+                    distance_in_km_exact: Number(distanceKm.toFixed(3))
+                };
+            })
+        );
+
+        // Filter out null values and apply distance filter
+        const nearbyVendors = vendorsWithDistance
+            .filter(Boolean)
+            .filter(v => v.distance_in_km_exact <= maxDistanceKm)
+            .sort((a, b) => a.distance_in_km_exact - b.distance_in_km_exact);
+
+        return res.json({
+            success: true,
+            user_location: { lat: userLat, lng: userLng },
+            count: nearbyVendors.length,
+            vendors: nearbyVendors
+        });
+    } catch (err) {
+        console.error("Get Nearby Vendors Realtime Error:", err);
+        return res.status(500).json({ 
+            success: false, 
+            message: "Something went wrong", 
+            error: err.message 
+        });
     }
 };
 
@@ -489,7 +682,3 @@ const calculateDistanceKm = (lat1, lng1, lat2, lng2) => {
 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
-
-
-
-

@@ -324,7 +324,11 @@ async function refresh(req, res, next) {
       return res.status(401).json({ error: "Invalid refresh token" });
     }
 
-    const user = await User.findById(decoded.id);
+    const decodedId = decoded?.id || decoded?.userId;
+    let user = decodedId ? await User.findById(decodedId) : null;
+    if (!user && decoded?.email) {
+      user = await User.findOne({ email: decoded.email });
+    }
     if (!user) return res.status(401).json({ error: "User not found" });
 
     const payload = {

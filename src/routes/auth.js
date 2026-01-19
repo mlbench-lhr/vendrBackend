@@ -30,6 +30,7 @@ router.post('/user/logout', authController.logout);
 
 router.get('/user/profile', auth, userController.getUserProfile);
 router.get('/user/nearby-vendors', auth, userController.getNearbyVendors);
+router.get('/user/nearby-vendors-realtime', auth, userController.getNearbyVendorsRealtime);
 router.get('/vendors/search', auth, userController.searchVendors);
 router.get("/vendor/:vendorId/details", auth, userController.getVendorDetails);
 router.get('/menus/vendor/:vendor_id', auth, menuController.getMenusByVendor);

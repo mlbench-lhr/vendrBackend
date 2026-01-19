@@ -13,7 +13,7 @@ module.exports = function auth(req, res, next) {
     const decoded = jwtService.verifyAccess(token);
 
     req.user = {
-      id: decoded.id,
+      id: decoded.id || decoded.userId,
       email: decoded.email,
       role: decoded.role
     };
