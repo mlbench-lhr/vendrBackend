@@ -9,6 +9,34 @@ const cloudinary = require('../config/cloudinary');
 const mongoose = require("mongoose");
 const { getUserLocationFromRtdb, getVendorLocationsFromRtdb } = require("../services/firebaseRtdbService");
 const { notifyUserNearbyVendorsNow } = require("../services/proximityAlertService");
+const jwtService = require("../services/jwtService");
+
+function escapeRegex(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getDecodedAccessUser(req) {
+    const header = req.headers?.authorization;
+    if (!header || typeof header !== "string" || !header.startsWith("Bearer ")) return null;
+    const token = header.slice(7);
+    try {
+        const decoded = jwtService.verifyAccess(token);
+        return {
+            id: decoded?.id || decoded?.userId,
+            email: decoded?.email,
+            role: decoded?.role,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function toFiniteNumberOrNull(value) {
+    if (value === undefined) return undefined;
+    if (value === null || value === "") return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
 
 exports.editProfile = async (req, res) => {
     try {
@@ -252,24 +280,46 @@ exports.deleteAccount = async (req, res, next) => {
 };
 exports.updateFcmDeviceToken = async (req, res) => {
     try {
-        const { userId, token, lat, lng } = req.body;
+        const decodedUser = getDecodedAccessUser(req);
+        const {
+            userId,
+            user_id,
+            id,
+            token,
+            fcmToken,
+            fcm_token,
+            lat,
+            lng
+        } = req.body;
 
-        const user = await User.findById(userId);
+        const resolvedUserId = userId || user_id || id || decodedUser?.id;
+        const resolvedEmail = decodedUser?.email;
+        const resolvedToken = token || fcmToken || fcm_token;
+        const resolvedLat = toFiniteNumberOrNull(lat);
+        const resolvedLng = toFiniteNumberOrNull(lng);
+
+        if (!resolvedUserId && !resolvedEmail) {
+            return res.status(400).json({ success: false, message: "userId or email required" });
+        }
+
+        const user =
+            (resolvedUserId ? await User.findById(resolvedUserId) : null) ||
+            (resolvedEmail ? await User.findOne({ email: resolvedEmail }) : null);
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
         // update lat/lng only if provided (not undefined)
-        if (lat !== undefined) user.lat = lat ?? null;
-        if (lng !== undefined) user.lng = lng ?? null;
+        if (resolvedLat !== undefined) user.lat = resolvedLat;
+        if (resolvedLng !== undefined) user.lng = resolvedLng;
 
-        if (token) {
+        if (resolvedToken) {
             if (!Array.isArray(user.fcmDeviceTokens)) {
                 user.fcmDeviceTokens = [];
             }
 
-            if (!user.fcmDeviceTokens.includes(token)) {
-                user.fcmDeviceTokens.push(token);
+            if (!user.fcmDeviceTokens.includes(resolvedToken)) {
+                user.fcmDeviceTokens.push(resolvedToken);
             }
         }
 
@@ -572,7 +622,7 @@ const getTodaysHoursCount = (hours) => {
 
 exports.searchVendors = async (req, res, next) => {
     try {
-        const { query = "", lat, lng, distance } = req.query;
+        const { query = "", vendor_type, vendorType, lat, lng, distance } = req.query;
         // ✅ Mandatory validations
         if (!query.trim()) {
             return res.status(400).json({
@@ -592,21 +642,36 @@ exports.searchVendors = async (req, res, next) => {
         const userLng = parseFloat(lng);
         const maxDistance = parseFloat(distance);
         const text = query.trim();
+        const vendorTypeText = String(vendor_type ?? vendorType ?? "").trim();
+        const searchRegex = new RegExp(escapeRegex(text), "i");
+        const exactVendorTypeRegexFromParam = vendorTypeText
+            ? new RegExp(`^${escapeRegex(vendorTypeText)}$`, "i")
+            : null;
+        const exactVendorTypeRegexFromQuery = new RegExp(`^${escapeRegex(text)}$`, "i");
+
+        const shouldUseQueryAsVendorType =
+            !exactVendorTypeRegexFromParam &&
+            (await Vendor.exists({ vendor_type: exactVendorTypeRegexFromQuery }));
+
+        const vendorTypeFilterRegex =
+            exactVendorTypeRegexFromParam || (shouldUseQueryAsVendorType ? exactVendorTypeRegexFromQuery : null);
+        const vendorTypeFilter = vendorTypeFilterRegex ? { vendor_type: vendorTypeFilterRegex } : {};
 
         // 1️⃣ Vendors matching by vendor name, vendor type, shop address
         const vendorsMatch = await Vendor.find({
+            ...vendorTypeFilter,
             $or: [
-                { name: { $regex: text, $options: "i" } },
-                { vendor_type: { $regex: text, $options: "i" } },
-                { shop_address: { $regex: text, $options: "i" } }
+                { name: { $regex: searchRegex } },
+                { vendor_type: { $regex: searchRegex } },
+                { shop_address: { $regex: searchRegex } }
             ]
         }).select("_id");
 
         // 2️⃣ Vendors matching menus (menu name OR category)
         const menusMatch = await Menu.find({
             $or: [
-                { name: { $regex: text, $options: "i" } },
-                { category: { $regex: text, $options: "i" } }
+                { name: { $regex: searchRegex } },
+                { category: { $regex: searchRegex } }
             ]
         }).select("vendor_id");
 
@@ -624,6 +689,7 @@ exports.searchVendors = async (req, res, next) => {
 
         // Fetch vendor details
         const vendors = await Vendor.find({
+            ...vendorTypeFilter,
             _id: { $in: uniqueVendorIds }
         }).select("name profile_image vendor_type shop_address lat lng");
 

@@ -18,6 +18,30 @@ const appleSignin = require("apple-signin-auth");
 const ObjectId = mongoose.Types.ObjectId;
 const { notifyUsersNearVendor } = require("../services/notificationService");
 
+function getDecodedAccessUser(req) {
+  const header = req.headers?.authorization;
+  if (!header || typeof header !== "string" || !header.startsWith("Bearer "))
+    return null;
+  const token = header.slice(7);
+  try {
+    const decoded = jwtService.verifyAccess(token);
+    return {
+      id: decoded?.id || decoded?.userId,
+      email: decoded?.email,
+      role: decoded?.role,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function toFiniteNumberOrNull(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 // EMAIL REGISTRATION
 exports.vendorSignupRequestOtp = async (req, res, next) => {
   try {
@@ -783,36 +807,73 @@ exports.getLanguage = async (req, res, next) => {
 };
 exports.updateFcmDeviceToken = async (req, res) => {
   try {
-    const { userId, token, lat, lng } = req.body;
+    const decodedUser = getDecodedAccessUser(req);
+    const {
+      userId,
+      user_id,
+      vendorId,
+      vendor_id,
+      id,
+      token,
+      fcmToken,
+      fcm_token,
+      lat,
+      lng,
+    } = req.body;
 
-    const user = await Vendor.findById(userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+    const resolvedVendorId =
+      userId || user_id || vendorId || vendor_id || id || decodedUser?.id;
+    const resolvedEmail = decodedUser?.email;
+    const resolvedToken = token || fcmToken || fcm_token;
+    const resolvedLat = toFiniteNumberOrNull(lat);
+    const resolvedLng = toFiniteNumberOrNull(lng);
+
+    if (!resolvedVendorId && !resolvedEmail) {
+      return res
+        .status(400)
+        .json({ success: false, message: "vendorId or email required" });
+    }
+
+    const vendor =
+      (resolvedVendorId ? await Vendor.findById(resolvedVendorId) : null) ||
+      (resolvedEmail ? await Vendor.findOne({ email: resolvedEmail }) : null);
+
+    if (!vendor) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Vendor not found" });
     }
 
     // update lat/lng only if provided (not undefined)
-    if (lat !== undefined) user.lat = lat ?? null;
-    if (lng !== undefined) user.lng = lng ?? null;
+    if (resolvedLat !== undefined) vendor.lat = resolvedLat;
+    if (resolvedLng !== undefined) vendor.lng = resolvedLng;
 
-    if (token) {
-      if (!Array.isArray(user.fcmDeviceTokens)) {
-        user.fcmDeviceTokens = [];
+    if (resolvedToken) {
+      if (!Array.isArray(vendor.fcmDeviceTokens)) {
+        vendor.fcmDeviceTokens = [];
       }
 
-      if (!user.fcmDeviceTokens.includes(token)) {
-        user.fcmDeviceTokens.push(token);
+      if (!vendor.fcmDeviceTokens.includes(resolvedToken)) {
+        vendor.fcmDeviceTokens.push(resolvedToken);
       }
     }
 
-    await user.save();
+    await vendor.save();
 
-    if (lat !== undefined && lng !== undefined && user.lat != null && user.lng != null) {
-      try { await notifyUsersNearVendor(user); } catch (e) { }
+    if (
+      resolvedLat !== undefined &&
+      resolvedLng !== undefined &&
+      vendor.lat != null &&
+      vendor.lng != null
+    ) {
+      try {
+        await notifyUsersNearVendor(vendor);
+      } catch (e) {}
     }
 
     return res.json({
       success: true,
-      user: user.toObject(),
+      user: vendor.toObject(),
     });
   } catch (err) {
     console.error("Error updating FCM token:", err);
