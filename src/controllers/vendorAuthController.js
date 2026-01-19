@@ -126,6 +126,21 @@ exports.vendorSignupVerify = async (req, res, next) => {
 
     await PasswordOtp.deleteOne({ email });
 
+    if (vendor.lat != null && vendor.lng != null) {
+      try {
+        await notifyUsersNearVendor(vendor);
+      } catch (e) { }
+    } else {
+      try {
+        const loc = await VendorLocation.findOne({ vendor_id: vendor._id }).lean();
+        const fixed = loc?.fixed_location;
+        if (fixed?.lat != null && fixed?.lng != null) {
+          const v = { _id: vendor._id, name: vendor.name, lat: fixed.lat, lng: fixed.lng };
+          await notifyUsersNearVendor(v);
+        }
+      } catch (e) { }
+    }
+
     const payload = {
       id: vendor._id.toString(),
       email: vendor.email,
@@ -422,6 +437,7 @@ exports.editProfile = async (req, res, next) => {
       success: true,
       message: "Profile updated successfully",
       vendor: updatedVendor,
+      
     });
   } catch (err) {
     console.error("Edit Profile Error:", err);

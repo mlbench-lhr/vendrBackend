@@ -1,6 +1,7 @@
 const cloudinary = require('../config/cloudinary');
 const Menu = require('../models/Menu');
 const Vendor = require('../models/Vendor');
+const { notifyUsersWhoFavoritedVendor } = require("../services/notificationService");
 
 exports.uploadMenu = async (req, res, next) => {
     try {
@@ -16,6 +17,25 @@ exports.uploadMenu = async (req, res, next) => {
             description,
             servings: servingsArray
         });
+
+        Vendor.findById(vendorId)
+            .select("name profile_image")
+            .lean()
+            .then((vendor) => {
+                const vendorName = vendor?.name || "A vendor";
+                const title = `New item from ${vendorName}`;
+                const body = `${menu.name} was added`;
+                const image = menu.image_url || vendor?.profile_image || null;
+                return notifyUsersWhoFavoritedVendor(vendorId, {
+                    title,
+                    body,
+                    image,
+                    data: { menuId: menu._id.toString(), event: "new_menu" },
+                });
+            })
+            .catch((err) => {
+                console.error("Favorite vendor notify failed:", err);
+            });
 
         return res.json({ success: true, message: "Menu uploaded successfully", menu });
     } catch (err) {
