@@ -39,12 +39,26 @@ function toStringData(data) {
   return out;
 }
 
+function maskToken(token) {
+  const s = String(token || "");
+  if (!s) return "";
+  if (s.length <= 10) return `${s.slice(0, 3)}...${s.slice(-2)}`;
+  return `${s.slice(0, 6)}...${s.slice(-4)}`;
+}
+
 async function sendAlert(deviceToken, title, body, data) {
   if (!PROJECT_ID) {
     logger.error("FCM PROJECT_ID missing");
     return null;
   }
-  console.log("deviceToken----", deviceToken);
+
+  const tokenLabel = maskToken(deviceToken);
+  logger.info("FCM sendAlert:request", {
+    projectId: PROJECT_ID,
+    token: tokenLabel,
+    title,
+    bodyLength: String(body || "").length,
+  });
 
   const payload = {
     message: {
@@ -54,7 +68,13 @@ async function sendAlert(deviceToken, title, body, data) {
     },
   };
 
-  const token = await getAccessToken();
+  let token;
+  try {
+    token = await getAccessToken();
+  } catch (err) {
+    logger.error("FCM getAccessToken failed", err);
+    return null;
+  }
 
   const options = {
     method: "POST",
@@ -68,22 +88,33 @@ async function sendAlert(deviceToken, title, body, data) {
 
   return await new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
-      let body = "";
-      console.log("FCM status:", res.statusCode);
+      let responseBody = "";
 
-      res.on("data", (chunk) => (body += chunk));
+      res.on("data", (chunk) => (responseBody += chunk));
       res.on("end", () => {
-        console.log("FCM response:", body);
+        const statusCode = res.statusCode;
+        let json = {};
         try {
-          const json = body ? JSON.parse(body) : {};
-          resolve(json);
-        } catch (e) {
-          console.error("FCM parse error:", e);
-          resolve({});
+          json = responseBody ? JSON.parse(responseBody) : {};
+        } catch (err) {
+          logger.error("FCM response JSON parse failed", err);
         }
+
+        if (statusCode >= 400) {
+          logger.error("FCM sendAlert:response_error", { statusCode, token: tokenLabel, responseBody });
+        } else {
+          logger.info("FCM sendAlert:response_ok", { statusCode, token: tokenLabel });
+        }
+
+        resolve(json);
       });
     });
-    req.on("error", reject);
+
+    req.on("error", (err) => {
+      logger.error("FCM sendAlert:request_error", err);
+      reject(err);
+    });
+
     req.write(JSON.stringify(payload));
     req.end();
   });
