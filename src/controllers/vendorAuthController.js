@@ -406,16 +406,13 @@ exports.refresh = async (req, res, next) => {
 exports.editProfile = async (req, res, next) => {
   try {
     const vendorId = req.user.id;
-    const { name, vendor_type, shop_address, profile_image, lat, lng } =
-      req.body;
+    const { name, vendor_type, shop_address, profile_image, lat, lng } = req.body;
 
-    let updateData = { name, vendor_type, shop_address, lat, lng };
+    const updateData = { name, vendor_type, shop_address };
+    if (lat !== undefined) updateData.lat = lat;
+    if (lng !== undefined) updateData.lng = lng;
+    if (profile_image) updateData.profile_image = profile_image;
 
-    if (profile_image) {
-      updateData.profile_image = profile_image;
-    }
-
-    // Fetch vendor to get old image public_id
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) {
       return res.status(404).json({
@@ -429,7 +426,14 @@ exports.editProfile = async (req, res, next) => {
       new: true,
     });
 
-    if (updatedVendor && updatedVendor.lat != null && updatedVendor.lng != null) {
+    const coordsChanged =
+      (lat !== undefined || lng !== undefined) &&
+      updatedVendor &&
+      updatedVendor.lat != null &&
+      updatedVendor.lng != null &&
+      (vendor.lat !== updatedVendor.lat || vendor.lng !== updatedVendor.lng);
+
+    if (coordsChanged) {
       try { await notifyUsersNearVendor(updatedVendor); } catch (e) { }
     }
 
@@ -728,6 +732,8 @@ exports.setLocation = async (req, res, next) => {
     const vendorId = req.user.id;
     const { mode, fixed_location, remote_locations } = req.body;
 
+    const prev = await VendorLocation.findOne({ vendor_id: vendorId }).lean();
+
     const update = {
       vendor_id: vendorId,
       mode,
@@ -751,9 +757,17 @@ exports.setLocation = async (req, res, next) => {
     );
 
     if (mode === "fixed" && result?.fixed_location?.lat != null && result?.fixed_location?.lng != null) {
-      const vendor = await Vendor.findById(vendorId).select("name");
-      const v = { _id: vendor._id, name: vendor.name, lat: result.fixed_location.lat, lng: result.fixed_location.lng };
-      try { await notifyUsersNearVendor(v); } catch (e) { }
+      const prevFixed = prev?.fixed_location;
+      const changed =
+        prev?.mode !== "fixed" ||
+        prevFixed?.lat !== result.fixed_location.lat ||
+        prevFixed?.lng !== result.fixed_location.lng;
+
+      if (changed) {
+        const vendor = await Vendor.findById(vendorId).select("name");
+        const v = { _id: vendor._id, name: vendor.name, lat: result.fixed_location.lat, lng: result.fixed_location.lng };
+        try { await notifyUsersNearVendor(v); } catch (e) { }
+      }
     }
 
     return res.json({ success: true, location: result });
