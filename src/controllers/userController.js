@@ -644,17 +644,24 @@ exports.searchVendors = async (req, res, next) => {
         const text = query.trim();
         const vendorTypeText = String(vendor_type ?? vendorType ?? "").trim();
         const searchRegex = new RegExp(escapeRegex(text), "i");
-        const exactVendorTypeRegexFromParam = vendorTypeText
-            ? new RegExp(`^${escapeRegex(vendorTypeText)}$`, "i")
+        const tokens = text
+            .toLowerCase()
+            .split(/[^a-z0-9]+/g)
+            .map(t => t.trim())
+            .filter(Boolean);
+
+        const vendorTypeFilterRegexFromQuery = tokens.length > 0
+            ? new RegExp(tokens.map(escapeRegex).join("|"), "i")
             : null;
-        const exactVendorTypeRegexFromQuery = new RegExp(`^${escapeRegex(text)}$`, "i");
 
         const shouldUseQueryAsVendorType =
-            !exactVendorTypeRegexFromParam &&
-            (await Vendor.exists({ vendor_type: exactVendorTypeRegexFromQuery }));
+            !vendorTypeText &&
+            vendorTypeFilterRegexFromQuery &&
+            (await Vendor.exists({ vendor_type: vendorTypeFilterRegexFromQuery }));
 
-        const vendorTypeFilterRegex =
-            exactVendorTypeRegexFromParam || (shouldUseQueryAsVendorType ? exactVendorTypeRegexFromQuery : null);
+        const vendorTypeFilterRegex = vendorTypeText
+            ? new RegExp(`^${escapeRegex(vendorTypeText)}$`, "i")
+            : (shouldUseQueryAsVendorType ? vendorTypeFilterRegexFromQuery : null);
         const vendorTypeFilter = vendorTypeFilterRegex ? { vendor_type: vendorTypeFilterRegex } : {};
 
         // 1️⃣ Vendors matching by vendor name, vendor type, shop address
