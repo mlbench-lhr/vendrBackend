@@ -23,8 +23,8 @@ exports.uploadMenu = async (req, res, next) => {
             .lean()
             .then((vendor) => {
                 const vendorName = vendor?.name || "A vendor";
-                const title = `New item from ${vendorName}`;
-                const body = `${menu.name} was added`;
+                const title = "Updated Menu";
+                const body = `Your favourite vendor ${vendorName} updated their menu, Check new available options!`;
                 const image = menu.image_url || vendor?.profile_image || null;
                 return notifyUsersWhoFavoritedVendor(vendorId, {
                     title,
@@ -79,6 +79,25 @@ exports.editMenu = async (req, res, next) => {
         if (image_url !== undefined) menu.image_url = image_url;
 
         await menu.save();
+
+        Vendor.findById(vendorId)
+            .select("name profile_image")
+            .lean()
+            .then((vendor) => {
+                const vendorName = vendor?.name || "A vendor";
+                const title = "Updated Menu";
+                const body = `Your favourite vendor ${vendorName} updated their menu, Check new available options!`;
+                const image = menu.image_url || vendor?.profile_image || null;
+                return notifyUsersWhoFavoritedVendor(vendorId, {
+                    title,
+                    body,
+                    image,
+                    data: { menuId: menu._id.toString(), event: "menu_updated" },
+                });
+            })
+            .catch((err) => {
+                console.error("Favorite vendor notify failed:", err);
+            });
 
         return res.json({ success: true, message: "Menu Edited successfully", menu });
     } catch (err) {

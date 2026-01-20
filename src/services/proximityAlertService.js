@@ -194,9 +194,9 @@ async function notifyUsersWhenFavoriteVendorEntersRadiusAtCoords(input, radiusKm
     .lean();
   const wasInsideByUserId = new Map(existing.map((e) => [e.user_id.toString(), Boolean(e.inside_radius)]));
 
-  const title = "Favourite vendor nearby";
+  const title = "Favorite Vendor Update";
   const name = input.vendorName || "A vendor";
-  const body = `${name} is within ${radiusKm} km of you`;
+  const body = `Your favourite vendor ${name} is nearby, Go Check them out!`;
 
   const now = new Date();
   const alertOps = [];
