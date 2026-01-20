@@ -51,9 +51,8 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
     return;
   }
 
-  const title = "New vendor near you";
-  const name = vendor.name || "A vendor";
-  const body = `${name} is within ${radiusKm} km of you`;
+  const title = "New Vendor Nearby";
+  const body = "A new vendor registered & available in your vicinity, Explore Now!";
 
   const tasks = [];
   let inRadiusUsers = 0;
