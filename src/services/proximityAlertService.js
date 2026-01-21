@@ -36,7 +36,7 @@ function isValidObjectIdString(value) {
 }
 
 async function notifyUserNearbyVendorsNow(userId, radiusKm = 5) {
-  const user = await User.findById(userId).select("distance_based_alert fcmDeviceTokens lat lng").lean();
+  const user = await User.findById(userId).select("_id distance_based_alert fcmDeviceTokens lat lng").lean();
   if (!user || !user.distance_based_alert) return;
   if (user.lat == null || user.lng == null) return;
 
@@ -71,7 +71,7 @@ async function notifyUsersWhenVendorEntersRadiusAtCoords(input, radiusKm = 5, us
       lat: { $ne: null },
       lng: { $ne: null },
     })
-      .select("fcmDeviceTokens lat lng")
+      .select("_id fcmDeviceTokens lat lng")
       .lean());
 
   if (!users.length) return;
@@ -346,7 +346,7 @@ async function pollVendorsAndNotify() {
         lat: { $ne: null },
         lng: { $ne: null },
       })
-        .select("fcmDeviceTokens lat lng")
+        .select("_id fcmDeviceTokens lat lng")
         .lean();
 
       if (!favoriteUsers.length) continue;

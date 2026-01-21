@@ -60,13 +60,18 @@ exports.getNotifications = async (req, res) => {
   try {
     const authId = req.user.id;
     const role = req.user.role; // "vendor" or "user"
-
+    const scope = String(req.query.scope || "").toLowerCase();
+   console.log("authId", authId, "role", role, "scope", scope);
     let filter = {};
 
-    if (role === "vendor") {
-      filter.vendor_id = authId;
+    if (scope === "all") {
+      filter = { $or: [{ vendor_id: authId }, { user_id: authId }] };
     } else {
-      filter.user_id = authId;
+      if (role === "vendor") {
+        filter.vendor_id = authId;
+      } else {
+        filter.user_id = authId;
+      }
     }
 
     const limitRaw = Number(req.query.limit || 50);
