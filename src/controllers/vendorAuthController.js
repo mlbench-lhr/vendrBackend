@@ -406,12 +406,13 @@ exports.refresh = async (req, res, next) => {
 exports.editProfile = async (req, res, next) => {
   try {
     const vendorId = req.user.id;
-    const { name, vendor_type, shop_address, profile_image, lat, lng } = req.body;
+    const { name, vendor_type, shop_address, profile_image, lat, lng, phone } = req.body;
 
     const updateData = { name, vendor_type, shop_address };
     if (lat !== undefined) updateData.lat = lat;
     if (lng !== undefined) updateData.lng = lng;
     if (profile_image) updateData.profile_image = profile_image;
+    if (phone !== undefined && (phone === null || phone === "")) updateData.phone = null;
 
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) {
