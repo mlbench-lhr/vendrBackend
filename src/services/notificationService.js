@@ -174,10 +174,10 @@ async function notifyUsersWhoFavoritedVendor(vendorId, input) {
     }
   }
 
-  const tasks = [Notification.insertMany(notifications)];
-  if (fcmTasks.length) tasks.push(Promise.all(fcmTasks));
-
-  await Promise.all(tasks);
+  await Notification.insertMany(notifications);
+  if (fcmTasks.length) {
+    await Promise.allSettled(fcmTasks);
+  }
 
   logger.info("Favorite vendor notifications sent", {
     vendorId: vendorObjectId.toString(),
