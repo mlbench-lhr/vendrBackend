@@ -53,6 +53,8 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
 
   const title = "New Vendor Nearby";
   const body = "A new vendor registered & available in your vicinity, Explore Now!";
+  const type = "new_vendor_nearby";
+  const data = { vendorId: vendor._id.toString(), type };
 
   const tasks = [];
   let inRadiusUsers = 0;
@@ -73,12 +75,12 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
       tokens: tokens.length,
     });
 
-    tasks.push(Notification.create({ user_id: u._id, vendor_id: vendor._id, title, body }));
+    tasks.push(Notification.create({ user_id: u._id, vendor_id: vendor._id, title, body, type, data }));
     persistedNotifications += 1;
 
     for (const t of tokens) {
       pushAttempts += 1;
-      tasks.push(sendAlert(t, title, body, { vendorId: vendor._id.toString() }));
+      tasks.push(sendAlert(t, title, body, data));
     }
   }
 
@@ -154,6 +156,8 @@ async function notifyUsersWhoFavoritedVendor(vendorId, input) {
   const notifications = users.map((u) => ({
     user_id: u._id,
     vendor_id: vendorObjectId,
+    type: "favorite_vendor",
+    data: { ...(data || {}), vendorId: vendorObjectId.toString(), type: "favorite_vendor" },
     title,
     body,
     image,
@@ -180,4 +184,81 @@ async function notifyUsersWhoFavoritedVendor(vendorId, input) {
   });
 }
 
-module.exports = { notifyUsersNearVendor, notifyUsersWhoFavoritedVendor };
+async function sendPushToUserAndSave(userId, input) {
+  const userObjectId = toObjectIdOrNull(userId);
+  if (!userObjectId) return null;
+
+  const {
+    vendorId,
+    title,
+    body,
+    image = null,
+    type = null,
+    data = null,
+  } = input || {};
+
+  if (!title || !body) return null;
+
+  const vendorObjectId = vendorId ? toObjectIdOrNull(vendorId) : null;
+  const notification = await Notification.create({
+    user_id: userObjectId,
+    vendor_id: vendorObjectId,
+    type,
+    data,
+    title,
+    body,
+    image,
+  });
+
+  const user = await User.findById(userObjectId).select("fcmDeviceTokens").lean();
+  const tokens = (user?.fcmDeviceTokens || []).filter(Boolean);
+
+  if (tokens.length) {
+    await Promise.allSettled(tokens.map((t) => sendAlert(t, title, body, data)));
+  }
+
+  return { notification, pushes: tokens.length };
+}
+
+async function sendPushToVendorAndSave(vendorId, input) {
+  const vendorObjectId = toObjectIdOrNull(vendorId);
+  if (!vendorObjectId) return null;
+
+  const {
+    userId,
+    title,
+    body,
+    image = null,
+    type = null,
+    data = null,
+  } = input || {};
+
+  if (!title || !body) return null;
+
+  const userObjectId = userId ? toObjectIdOrNull(userId) : null;
+  const notification = await Notification.create({
+    user_id: userObjectId,
+    vendor_id: vendorObjectId,
+    type,
+    data,
+    title,
+    body,
+    image,
+  });
+
+  const vendor = await Vendor.findById(vendorObjectId).select("fcmDeviceTokens").lean();
+  const tokens = (vendor?.fcmDeviceTokens || []).filter(Boolean);
+
+  if (tokens.length) {
+    await Promise.allSettled(tokens.map((t) => sendAlert(t, title, body, data)));
+  }
+
+  return { notification, pushes: tokens.length };
+}
+
+module.exports = {
+  notifyUsersNearVendor,
+  notifyUsersWhoFavoritedVendor,
+  sendPushToUserAndSave,
+  sendPushToVendorAndSave,
+};
