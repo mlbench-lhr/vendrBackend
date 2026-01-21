@@ -87,6 +87,8 @@ async function notifyUsersWhenVendorEntersRadiusAtCoords(input, radiusKm = 5, us
   const title = "Vendor nearby";
   const name = input.vendorName || "A vendor";
   const body = `${name} is within ${radiusKm} km of you`;
+  const type = "distance_based";
+  const data = { vendorId: vendorId.toString(), type };
 
   const now = new Date();
   const alertOps = [];
@@ -109,11 +111,11 @@ async function notifyUsersWhenVendorEntersRadiusAtCoords(input, radiusKm = 5, us
         },
       });
 
-      notifications.push({ user_id: u._id, vendor_id: vendorId, title, body });
+      notifications.push({ user_id: u._id, vendor_id: vendorId, title, body, type, data });
 
       const tokens = (u.fcmDeviceTokens || []).filter(Boolean);
       for (const t of tokens) {
-        fcmTasks.push(sendAlert(t, title, body, { vendorId: vendorId.toString(), type: "distance_based" }));
+        fcmTasks.push(sendAlert(t, title, body, data));
       }
       continue;
     }
@@ -197,6 +199,8 @@ async function notifyUsersWhenFavoriteVendorEntersRadiusAtCoords(input, radiusKm
   const title = "Favorite Vendor Update";
   const name = input.vendorName || "A vendor";
   const body = `Your favourite vendor ${name} is nearby, Go Check them out!`;
+  const type = "favorite_vendor";
+  const data = { vendorId: vendorId.toString(), type };
 
   const now = new Date();
   const alertOps = [];
@@ -219,11 +223,11 @@ async function notifyUsersWhenFavoriteVendorEntersRadiusAtCoords(input, radiusKm
         },
       });
 
-      notifications.push({ user_id: u._id, vendor_id: vendorId, title, body });
+      notifications.push({ user_id: u._id, vendor_id: vendorId, title, body, type, data });
 
       const tokens = (u.fcmDeviceTokens || []).filter(Boolean);
       for (const t of tokens) {
-        fcmTasks.push(sendAlert(t, title, body, { vendorId: vendorId.toString(), type: "favorite_vendor" }));
+        fcmTasks.push(sendAlert(t, title, body, data));
       }
       continue;
     }

@@ -109,6 +109,10 @@ router.post("/notifications/seed", notificationController.seedSampleNotification
 
 // get notifications for logged-in vendor or user
 router.get("/notifications", auth, notificationController.getNotifications);
+router.get("/notifications/unread-count", auth, notificationController.getUnreadCount);
+router.patch("/notifications/read-all", auth, notificationController.markAllRead);
+router.patch("/notifications/:id/read", auth, notificationController.markNotificationRead);
+router.delete("/notifications/:id", auth, notificationController.deleteNotification);
 
 router.post("/add-favorite", auth, favoriteController.addFavorite);
 router.post("/remove-favorite", auth, favoriteController.removeFavorite);
