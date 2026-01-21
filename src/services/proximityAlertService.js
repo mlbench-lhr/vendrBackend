@@ -111,7 +111,7 @@ async function notifyUsersWhenVendorEntersRadiusAtCoords(input, radiusKm = 5, us
         },
       });
 
-      notifications.push({ user_id: u._id, vendor_id: vendorId, title, body, type, data });
+      notifications.push({ user_id: u._id, vendor_id: vendorId, title, body, type, data, created_at: now });
 
       const tokens = (u.fcmDeviceTokens || []).filter(Boolean);
       for (const t of tokens) {
@@ -223,7 +223,7 @@ async function notifyUsersWhenFavoriteVendorEntersRadiusAtCoords(input, radiusKm
         },
       });
 
-      notifications.push({ user_id: u._id, vendor_id: vendorId, title, body, type, data });
+      notifications.push({ user_id: u._id, vendor_id: vendorId, title, body, type, data, created_at: now });
 
       const tokens = (u.fcmDeviceTokens || []).filter(Boolean);
       for (const t of tokens) {

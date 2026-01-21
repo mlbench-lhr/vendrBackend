@@ -55,6 +55,7 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
   const body = "A new vendor registered & available in your vicinity, Explore Now!";
   const type = "new_vendor_nearby";
   const data = { vendorId: vendor._id.toString(), type };
+  const createdAt = new Date();
 
   const tasks = [];
   let inRadiusUsers = 0;
@@ -75,7 +76,7 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
       tokens: tokens.length,
     });
 
-    tasks.push(Notification.create({ user_id: u._id, vendor_id: vendor._id, title, body, type, data }));
+    tasks.push(Notification.create({ user_id: u._id, vendor_id: vendor._id, title, body, type, data, created_at: createdAt }));
     persistedNotifications += 1;
 
     for (const t of tokens) {
@@ -153,6 +154,7 @@ async function notifyUsersWhoFavoritedVendor(vendorId, input) {
   const vendor = await Vendor.findById(vendorObjectId).select("name").lean();
   const vendorName = vendor?.name || undefined;
 
+  const createdAt = new Date();
   const notifications = users.map((u) => ({
     user_id: u._id,
     vendor_id: vendorObjectId,
@@ -161,6 +163,7 @@ async function notifyUsersWhoFavoritedVendor(vendorId, input) {
     title,
     body,
     image,
+    created_at: createdAt,
   }));
 
   const fcmTasks = [];
