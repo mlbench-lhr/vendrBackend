@@ -300,20 +300,18 @@ exports.updateFcmDeviceToken = async (req, res) => {
         const decodedUser = getDecodedAccessUser(req);
         const {
             userId,
-            user_id,
-            id,
+          
             token,
-            fcmToken,
-            fcm_token,
-            lat,
-            lng
+           
+            userLat,
+            userLng
         } = req.body;
 
-        const resolvedUserId = userId || user_id || id || decodedUser?.id;
+        const resolvedUserId = userId 
         const resolvedEmail = decodedUser?.email;
-        const resolvedToken = token || fcmToken || fcm_token;
-        const resolvedLat = toFiniteNumberOrNull(lat);
-        const resolvedLng = toFiniteNumberOrNull(lng);
+        const resolvedToken = token || null;
+        const resolvedLat = toFiniteNumberOrNull(userLat);
+        const resolvedLng = toFiniteNumberOrNull(userLng);
 
         if (!resolvedUserId && !resolvedEmail) {
             return res.status(400).json({ success: false, message: "userId or email required" });

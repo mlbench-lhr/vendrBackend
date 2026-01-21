@@ -43,7 +43,7 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
     lat: { $ne: null },
     lng: { $ne: null },
     new_vendor_alert: true,
-  }).select("fcmDeviceTokens lat lng").lean();
+  }).select("_id fcmDeviceTokens lat lng").lean();
   console.log("[new_vendor_alert] candidateUsers", { count: users.length });
 
   if (!users.length) {
@@ -54,13 +54,12 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
   const title = "New Vendor Nearby";
   const body = "A new vendor registered & available in your vicinity, Explore Now!";
   const type = "new_vendor_nearby";
-  const data = { vendorId: vendor._id.toString(), type };
+  const data = { vendorId: vendor._id.toString(), type: "new_vendor_nearby", event: "new_vendor" };
   const createdAt = new Date();
 
-  const tasks = [];
+  const notifications = [];
+  const fcmTasks = [];
   let inRadiusUsers = 0;
-  let persistedNotifications = 0;
-  let pushAttempts = 0;
 
   for (const u of users) {
     const distance = calculateDistanceKm(u.lat, u.lng, coords.lat, coords.lng);
@@ -76,16 +75,14 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
       tokens: tokens.length,
     });
 
-    tasks.push(Notification.create({ user_id: u._id, vendor_id: vendor._id, title, body, type, data, created_at: createdAt }));
-    persistedNotifications += 1;
+    notifications.push({ user_id: u._id, vendor_id: vendor._id, title, body, type, data, created_at: createdAt });
 
     for (const t of tokens) {
-      pushAttempts += 1;
-      tasks.push(sendAlert(t, title, body, data));
+      fcmTasks.push(sendAlert(t, title, body, data));
     }
   }
 
-  if (!tasks.length) {
+  if (!notifications.length) {
     logger.info("Nearby vendor notifications: no users in radius", {
       vendorId: vendor._id.toString(),
       radiusKm,
@@ -94,7 +91,8 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
     return;
   }
 
-  const results = await Promise.allSettled(tasks);
+  await Notification.insertMany(notifications);
+  const results = fcmTasks.length ? await Promise.allSettled(fcmTasks) : [];
   const rejected = results.filter((r) => r.status === "rejected");
 
   logger.info("Nearby vendor notifications: processed", {
@@ -102,9 +100,8 @@ async function notifyUsersNearVendor(vendor, radiusKm = 5) {
     radiusKm,
     candidateUsers: users.length,
     inRadiusUsers,
-    persistedNotifications,
-    pushAttempts,
-    tasks: tasks.length,
+    notifications: notifications.length,
+    pushes: fcmTasks.length,
     failedTasks: rejected.length,
   });
 
@@ -147,7 +144,7 @@ async function notifyUsersWhoFavoritedVendor(vendorId, input) {
     _id: { $in: userObjectIds },
     favorite_vendor_alert: true,
   })
-    .select("fcmDeviceTokens")
+    .select("_id fcmDeviceTokens")
     .lean();
   if (!users.length) return;
 
@@ -174,10 +171,10 @@ async function notifyUsersWhoFavoritedVendor(vendorId, input) {
     }
   }
 
-  const tasks = [Notification.insertMany(notifications)];
-  if (fcmTasks.length) tasks.push(Promise.all(fcmTasks));
-
-  await Promise.all(tasks);
+  await Notification.insertMany(notifications);
+  if (fcmTasks.length) {
+    await Promise.allSettled(fcmTasks);
+  }
 
   logger.info("Favorite vendor notifications sent", {
     vendorId: vendorObjectId.toString(),
@@ -213,7 +210,7 @@ async function sendPushToUserAndSave(userId, input) {
     image,
   });
 
-  const user = await User.findById(userObjectId).select("fcmDeviceTokens").lean();
+  const user = await User.findById(userObjectId).select("_id fcmDeviceTokens").lean();
   const tokens = (user?.fcmDeviceTokens || []).filter(Boolean);
 
   if (tokens.length) {

@@ -36,10 +36,9 @@ function isValidObjectIdString(value) {
 }
 
 async function notifyUserNearbyVendorsNow(userId, radiusKm = 5) {
-  const user = await User.findById(userId).select("distance_based_alert fcmDeviceTokens lat lng").lean();
+  const user = await User.findById(userId).select("_id distance_based_alert fcmDeviceTokens lat lng").lean();
   if (!user || !user.distance_based_alert) return;
   if (user.lat == null || user.lng == null) return;
-  if (!Array.isArray(user.fcmDeviceTokens) || !user.fcmDeviceTokens.filter(Boolean).length) return;
 
   const vendorLocations = await getVendorLocationsFromRtdb();
   if (!vendorLocations.length) return;
@@ -71,9 +70,8 @@ async function notifyUsersWhenVendorEntersRadiusAtCoords(input, radiusKm = 5, us
       distance_based_alert: true,
       lat: { $ne: null },
       lng: { $ne: null },
-      fcmDeviceTokens: { $exists: true, $ne: [] },
     })
-      .select("fcmDeviceTokens lat lng")
+      .select("_id fcmDeviceTokens lat lng")
       .lean());
 
   if (!users.length) return;
@@ -134,10 +132,16 @@ async function notifyUsersWhenVendorEntersRadiusAtCoords(input, radiusKm = 5, us
   const tasks = [];
   if (alertOps.length) tasks.push(ProximityAlert.bulkWrite(alertOps, { ordered: false }));
   if (notifications.length) tasks.push(Notification.insertMany(notifications));
-  if (fcmTasks.length) tasks.push(Promise.all(fcmTasks));
 
   if (tasks.length) {
     await Promise.all(tasks);
+  }
+
+  if (fcmTasks.length) {
+    await Promise.allSettled(fcmTasks);
+  }
+
+  if (alertOps.length || notifications.length || fcmTasks.length) {
     logger.info("Proximity alerts processed", {
       vendorId: vendorId.toString(),
       alerts: alertOps.length,
@@ -153,7 +157,6 @@ async function notifyUserFavoriteVendorsNow(userId, radiusKm = 5) {
     .lean();
   if (!user || !user.favorite_vendor_alert) return;
   if (user.lat == null || user.lng == null) return;
-  if (!Array.isArray(user.fcmDeviceTokens) || !user.fcmDeviceTokens.filter(Boolean).length) return;
 
   const favorites = await FavoriteVendor.find({ userId: user._id.toString() }).select("vendorId").lean();
   if (!favorites.length) return;
@@ -246,10 +249,16 @@ async function notifyUsersWhenFavoriteVendorEntersRadiusAtCoords(input, radiusKm
   const tasks = [];
   if (alertOps.length) tasks.push(ProximityAlert.bulkWrite(alertOps, { ordered: false }));
   if (notifications.length) tasks.push(Notification.insertMany(notifications));
-  if (fcmTasks.length) tasks.push(Promise.all(fcmTasks));
 
   if (tasks.length) {
     await Promise.all(tasks);
+  }
+
+  if (fcmTasks.length) {
+    await Promise.allSettled(fcmTasks);
+  }
+
+  if (alertOps.length || notifications.length || fcmTasks.length) {
     logger.info("Favourite vendor proximity alerts processed", {
       vendorId: vendorId.toString(),
       alerts: alertOps.length,
@@ -310,7 +319,6 @@ async function pollVendorsAndNotify() {
       distance_based_alert: true,
       lat: { $ne: null },
       lng: { $ne: null },
-      fcmDeviceTokens: { $exists: true, $ne: [] },
     })
       .select("fcmDeviceTokens lat lng")
       .lean();
@@ -337,9 +345,8 @@ async function pollVendorsAndNotify() {
         favorite_vendor_alert: true,
         lat: { $ne: null },
         lng: { $ne: null },
-        fcmDeviceTokens: { $exists: true, $ne: [] },
       })
-        .select("fcmDeviceTokens lat lng")
+        .select("_id fcmDeviceTokens lat lng")
         .lean();
 
       if (!favoriteUsers.length) continue;
