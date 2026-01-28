@@ -45,7 +45,7 @@ function toFiniteNumberOrNull(value) {
 // EMAIL REGISTRATION
 exports.vendorSignupRequestOtp = async (req, res, next) => {
   try {
-    const { name, email, password, phone, vendor_type } = req.body;
+    const { name, email, password, phone, vendor_type, has_permit } = req.body;
     let role = "vendor";
 
     // Email uniqueness
@@ -55,7 +55,7 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
 
     const passwordHash = await passwordService.hashPassword(password);
 
-    const vendor = await Vendor.create({
+    const vendorCreateData = {
       name,
       email,
       phone,
@@ -63,7 +63,11 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
       passwordHash,
       provider: "email",
       verified: false,
-    });
+    };
+    if (has_permit !== undefined) {
+      vendorCreateData.has_permit = has_permit;
+    }
+    const vendor = await Vendor.create(vendorCreateData);
 
     const otp = generateOtp(4);
     const expires_at = Date.now() + 10 * 60 * 1000;
@@ -86,6 +90,7 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
       success: true,
       message: "OTP sent to email",
       vendor_id: vendor._id,
+      has_permit: vendor.has_permit,
     });
   } catch (err) {
     console.error("Vendor register error", err);
@@ -406,13 +411,14 @@ exports.refresh = async (req, res, next) => {
 exports.editProfile = async (req, res, next) => {
   try {
     const vendorId = req.user.id;
-    const { name, vendor_type, shop_address, profile_image, lat, lng, phone } = req.body;
+    const { name, vendor_type, shop_address, profile_image, lat, lng, phone, has_permit } = req.body;
 
     const updateData = { name, vendor_type, shop_address };
     if (lat !== undefined) updateData.lat = lat;
     if (lng !== undefined) updateData.lng = lng;
     if (profile_image) updateData.profile_image = profile_image;
     if (phone !== undefined && (phone === null || phone === "")) updateData.phone = null;
+    if (has_permit !== undefined) updateData.has_permit = has_permit;
 
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) {

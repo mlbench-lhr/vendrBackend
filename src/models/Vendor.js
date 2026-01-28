@@ -43,6 +43,7 @@ const VendorSchema = new Schema(
       type: String,
       required: false, // required only for OAuth vendors
     },
+    has_permit: { type: Boolean, default: false },
     profile_image: { type: String, default: null },
     profile_image_public_id: { type: String, default: null },
     shop_address: { type: String, default: null },

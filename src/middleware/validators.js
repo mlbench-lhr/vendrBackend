@@ -30,6 +30,7 @@ exports.vendorRegisterSchema = () =>
     phone: Joi.string().required(),
     vendor_type: Joi.string().required(),
     password: Joi.string().min(8).required(),
+    has_permit: Joi.boolean().optional(),
   });
 
 exports.vendorLoginSchema = () =>
@@ -75,6 +76,7 @@ exports.vendorEditProfileSchema = () =>
     profile_image: Joi.string().uri().optional(),
     lat: Joi.number().allow(null),
     lng: Joi.number().allow(null),
+    has_permit: Joi.boolean().optional(),
   });
 
 exports.changePasswordSchema = () =>
@@ -290,4 +292,11 @@ exports.deleteVendorReviewSchema = () =>
 exports.getVendorReviewsSchema = () =>
   Joi.object({
     vendorId: Joi.string().required(),
+  });
+
+exports.addUserReviewSchema = () =>
+  Joi.object({
+    userId: Joi.string().required(),
+    rating: Joi.number().min(1).max(5).required(),
+    message: Joi.string().allow("", null),
   });

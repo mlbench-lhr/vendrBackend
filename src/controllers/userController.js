@@ -3,6 +3,7 @@ const VendorHours = require("../models/VendorHours");
 const VendorLocation = require("../models/VendorLocation");
 const Menu = require("../models/Menu");
 const VendorReview = require("../models/VendorReview");
+const UserReview = require("../models/UserReview");
 const User = require("../models/User");
 const FavoriteVendor = require("../models/FavoriteVendor");
 const cloudinary = require('../config/cloudinary');
@@ -398,9 +399,18 @@ exports.getUserProfile = async (req, res) => {
         const favoriteVendors = await Vendor.find({ _id: { $in: vendorIds } })
             .select("name email phone vendor_type profile_image created_at");
 
+        const ratingAgg = await UserReview.aggregate([
+            { $match: { user_id: new mongoose.Types.ObjectId(resolvedUserId) } },
+            { $group: { _id: "$user_id", avgRating: { $avg: "$rating" }, total: { $sum: 1 } } }
+        ]);
+        const averageRating = ratingAgg.length > 0 ? parseFloat(ratingAgg[0].avgRating.toFixed(1)) : 0;
+        const totalUserReviews = ratingAgg.length > 0 ? ratingAgg[0].total : 0;
+
         const userProfile = {
             ...user.toObject(),
-            favoriteVendors
+            favoriteVendors,
+            average_rating: averageRating,
+            total_reviews: totalUserReviews
         };
 
         return res.json({ success: true, user: userProfile });

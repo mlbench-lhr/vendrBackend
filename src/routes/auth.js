@@ -9,6 +9,7 @@ const vendorController = require('../controllers/vendorAuthController');
 const menuController = require('../controllers/menuController');
 const passwordController = require('../controllers/passwordController');
 const reviewController = require('../controllers/vendorReviewController');
+const userReviewController = require('../controllers/userReviewController');
 const uploadController = require('../controllers/uploadController');
 const favoriteController = require('../controllers/favoriteController');
 const notificationController = require('../controllers/notificationController');
@@ -43,6 +44,7 @@ router.get('/user/language', auth, userController.getLanguage);
 router.post('/reviews', auth, validateBody(schemas.addVendorReviewSchema), reviewController.addReview);
 router.delete('/reviews/:id', auth, validateParams(schemas.deleteVendorReviewSchema), reviewController.deleteReview);
 router.get('/reviews/:vendorId', validateParams(schemas.getVendorReviewsSchema), reviewController.getReviews);
+router.post('/user/rating', auth, validateBody(schemas.addUserReviewSchema), userReviewController.addReview);
 router.post('/user/save-token', userController.updateFcmDeviceToken);
 
 //delete user account
