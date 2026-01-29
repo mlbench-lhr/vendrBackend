@@ -31,6 +31,7 @@ exports.vendorRegisterSchema = () =>
     vendor_type: Joi.string().required(),
     password: Joi.string().min(8).required(),
     has_permit: Joi.boolean().optional(),
+    with_permit: Joi.boolean().optional(),
   });
 
 exports.vendorLoginSchema = () =>
@@ -77,6 +78,7 @@ exports.vendorEditProfileSchema = () =>
     lat: Joi.number().allow(null),
     lng: Joi.number().allow(null),
     has_permit: Joi.boolean().optional(),
+    with_permit: Joi.boolean().optional(),
   });
 
 exports.changePasswordSchema = () =>

@@ -45,7 +45,7 @@ function toFiniteNumberOrNull(value) {
 // EMAIL REGISTRATION
 exports.vendorSignupRequestOtp = async (req, res, next) => {
   try {
-    const { name, email, password, phone, vendor_type, has_permit } = req.body;
+    const { name, email, password, phone, vendor_type, has_permit, with_permit } = req.body;
     let role = "vendor";
 
     // Email uniqueness
@@ -64,9 +64,8 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
       provider: "email",
       verified: false,
     };
-    if (has_permit !== undefined) {
-      vendorCreateData.has_permit = has_permit;
-    }
+    if (has_permit !== undefined) vendorCreateData.has_permit = has_permit;
+    if (with_permit !== undefined) vendorCreateData.with_permit = with_permit;
     const vendor = await Vendor.create(vendorCreateData);
 
     const otp = generateOtp(4);
@@ -91,6 +90,7 @@ exports.vendorSignupRequestOtp = async (req, res, next) => {
       message: "OTP sent to email",
       vendor_id: vendor._id,
       has_permit: vendor.has_permit,
+      with_permit: vendor.with_permit,
     });
   } catch (err) {
     console.error("Vendor register error", err);
@@ -411,7 +411,7 @@ exports.refresh = async (req, res, next) => {
 exports.editProfile = async (req, res, next) => {
   try {
     const vendorId = req.user.id;
-    const { name, vendor_type, shop_address, profile_image, lat, lng, phone, has_permit } = req.body;
+    const { name, vendor_type, shop_address, profile_image, lat, lng, phone, has_permit, with_permit } = req.body;
 
     const updateData = { name, vendor_type, shop_address };
     if (lat !== undefined) updateData.lat = lat;
@@ -419,6 +419,7 @@ exports.editProfile = async (req, res, next) => {
     if (profile_image) updateData.profile_image = profile_image;
     if (phone !== undefined && (phone === null || phone === "")) updateData.phone = null;
     if (has_permit !== undefined) updateData.has_permit = has_permit;
+    if (with_permit !== undefined) updateData.with_permit = with_permit;
 
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) {

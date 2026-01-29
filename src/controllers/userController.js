@@ -381,12 +381,20 @@ exports.getUserProfile = async (req, res) => {
             });
         }
 
-        const user =
+        let user =
             (userId ? await User.findById(userId) : null) ||
             (email ? await User.findOne({ email }) : null);
 
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        if (!user.requests_last_reset_at || user.requests_last_reset_at < today) {
+            user.requests_remaining = 10;
+            user.requests_last_reset_at = today;
+            await user.save();
         }
 
         const resolvedUserId = user._id.toString();
@@ -414,6 +422,48 @@ exports.getUserProfile = async (req, res) => {
         };
 
         return res.json({ success: true, user: userProfile });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong",
+            error: err.message
+        });
+    }
+};
+
+exports.consumeDailyRequest = async (req, res) => {
+    try {
+        const role = req.user?.role;
+        if (role !== "user") {
+            return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+        const userId = req.user?.id;
+        const email = req.user?.email;
+        let user =
+            (userId ? await User.findById(userId) : null) ||
+            (email ? await User.findOne({ email }) : null);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        if (!user.requests_last_reset_at || user.requests_last_reset_at < today) {
+            user.requests_remaining = 10;
+            user.requests_last_reset_at = today;
+        }
+        if (user.requests_remaining <= 0) {
+            return res.status(429).json({
+                success: false,
+                message: "No requests remaining for today",
+                requests_remaining: 0
+            });
+        }
+        user.requests_remaining = (user.requests_remaining || 0) - 1;
+        await user.save();
+        return res.json({
+            success: true,
+            requests_remaining: user.requests_remaining
+        });
     } catch (err) {
         return res.status(500).json({
             success: false,

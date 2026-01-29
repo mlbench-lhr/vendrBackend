@@ -37,6 +37,8 @@ const UserSchema = new Schema(
     favorite_vendor_alert: { type: Boolean, default: false },
     lat: { type: Number, default: null },
     lng: { type: Number, default: null },
+    requests_remaining: { type: Number, default: 10 },
+    requests_last_reset_at: { type: Date, default: null },
   },
   {
     timestamps: true, // createdAt, updatedAt automatically

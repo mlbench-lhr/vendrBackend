@@ -40,6 +40,7 @@ router.put('/user/edit-profile', auth, validateBody(schemas.userEditProfileSchem
 // user language
 router.put('/user/language', auth, validateBody(schemas.userLanguageSchema), userController.setLanguage);
 router.get('/user/language', auth, userController.getLanguage);
+router.put('/user/requests/decrement', auth, userController.consumeDailyRequest);
 
 router.post('/reviews', auth, validateBody(schemas.addVendorReviewSchema), reviewController.addReview);
 router.delete('/reviews/:id', auth, validateParams(schemas.deleteVendorReviewSchema), reviewController.deleteReview);
