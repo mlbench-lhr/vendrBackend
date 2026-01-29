@@ -140,7 +140,7 @@ exports.getVendorDetails = async (req, res, next) => {
 
         // 1. Vendor Basic Info
         const vendor = await Vendor.findById(vendorId).select(
-            "name profile_image phone vendor_type shop_address lat lng"
+            "name profile_image phone vendor_type shop_address lat lng has_permit with_permit"
         );
 
         if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
@@ -485,7 +485,7 @@ exports.getNearbyVendors = async (req, res, next) => {
         const vendors = await Vendor.find({
             lat: { $exists: true, $ne: null },
             lng: { $exists: true, $ne: null }
-        }).select("name profile_image vendor_type shop_address lat lng");
+        }).select("name profile_image vendor_type shop_address lat lng has_permit");
 
         const vendorsWithDistance = await Promise.all(
             vendors.map(async (vendor) => {
