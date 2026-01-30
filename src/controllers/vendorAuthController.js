@@ -930,7 +930,7 @@ exports.getVendorProfile = async (req, res, next) => {
 
     // 1. Vendor Basic Info
     const vendor = await Vendor.findById(vendorId).select(
-      "name profile_image vendor_type shop_address email phone lat lng"
+      "name profile_image vendor_type shop_address email phone lat lng has_permit with_permit"
     );
 
     if (!vendor) {
