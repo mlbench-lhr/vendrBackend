@@ -302,3 +302,8 @@ exports.addUserReviewSchema = () =>
     rating: Joi.number().min(1).max(5).required(),
     message: Joi.string().allow("", null),
   });
+
+exports.getUserReviewsSchema = () =>
+  Joi.object({
+    userId: Joi.string().required(),
+  });

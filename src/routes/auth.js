@@ -46,6 +46,7 @@ router.post('/reviews', auth, validateBody(schemas.addVendorReviewSchema), revie
 router.delete('/reviews/:id', auth, validateParams(schemas.deleteVendorReviewSchema), reviewController.deleteReview);
 router.get('/reviews/:vendorId', validateParams(schemas.getVendorReviewsSchema), reviewController.getReviews);
 router.post('/user/rating', auth, validateBody(schemas.addUserReviewSchema), userReviewController.addReview);
+router.get('/user/ratings', auth, userReviewController.getReviews);
 router.post('/user/save-token', userController.updateFcmDeviceToken);
 
 //delete user account
