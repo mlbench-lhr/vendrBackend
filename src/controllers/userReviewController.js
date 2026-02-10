@@ -61,7 +61,8 @@ exports.getReviews = async (req, res) => {
         id: v && v._id ? v._id : r.vendor_id,
         full_name: v && v.name ? v.name : null,
         profile_image: v && v.profile_image ? v.profile_image : null,
-        rating: r.rating
+        rating: r.rating,
+        created_at: r.created_at
       };
     });
 
