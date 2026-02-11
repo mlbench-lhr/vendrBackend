@@ -20,7 +20,7 @@ exports.userOauthSchema = () =>
     provider_id: Joi.string().required(),
     email: Joi.string().email().optional().allow(""),
     name: Joi.string().optional().allow(""),
-    platform: Joi.string().valid("android", "ios").optional(),
+    platform: Joi.string().valid("android", "ios", "webclient").optional(),
   });
 
 // VENDOR
@@ -45,7 +45,7 @@ exports.vendorOauthSchema = () =>
   Joi.object({
     provider: Joi.string().required(),
     provider_id: Joi.string().required(),
-    platform: Joi.string().valid("android", "ios").optional(),
+    platform: Joi.string().valid("android", "ios", "webclient").optional(),
   });
 
 // PASSWORD RESET

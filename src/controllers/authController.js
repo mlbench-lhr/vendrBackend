@@ -203,12 +203,16 @@ async function oauth(req, res, next) {
         process.env.GOOGLE_CLIENT_ID_ANDROID || process.env.GOOGLE_CLIENT_ID;
       const IOS_ID =
         process.env.GOOGLE_CLIENT_ID_IOS || process.env.GOOGLE_CLIENT_ID;
+      const WEB_ID =
+        process.env.GOOGLE_CLIENT_ID_WEBCLIENT || process.env.GOOGLE_CLIENT_ID;
       const audience =
         platform === "android"
           ? ANDROID_ID
           : platform === "ios"
           ? IOS_ID
-          : [ANDROID_ID, IOS_ID];
+          : platform === "webclient"
+          ? WEB_ID
+          : [ANDROID_ID, IOS_ID, WEB_ID];
       const ticket = await googleClient.verifyIdToken({
         idToken: provider_id,
         audience,

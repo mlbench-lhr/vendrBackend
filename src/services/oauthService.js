@@ -6,12 +6,17 @@ async function verifyGoogleToken(idToken, platform) {
     process.env.GOOGLE_CLIENT_ID_ANDROID || process.env.GOOGLE_CLIENT_ID;
   const IOS_ID =
     process.env.GOOGLE_CLIENT_ID_IOS || process.env.GOOGLE_CLIENT_ID;
+  const WEB_ID =
+    process.env.GOOGLE_CLIENT_ID_WEBCLIENT || process.env.GOOGLE_CLIENT_ID;
+  const p = String(platform || "").toLowerCase();
   const audience =
-    String(platform || "").toLowerCase() === "android"
+    p === "android"
       ? ANDROID_ID
-      : String(platform || "").toLowerCase() === "ios"
+      : p === "ios"
       ? IOS_ID
-      : [ANDROID_ID, IOS_ID];
+      : p === "webclient"
+      ? WEB_ID
+      : [ANDROID_ID, IOS_ID, WEB_ID];
   const ticket = await client.verifyIdToken({
     idToken,
     audience
