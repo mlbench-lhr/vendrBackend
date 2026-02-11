@@ -111,7 +111,7 @@ async function userSignupVerify(req, res, next) {
       tokens: {
         accessToken,
         refreshToken,
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "30d",
       },
     });
   } catch (err) {
@@ -168,7 +168,7 @@ async function login(req, res, next) {
       tokens: {
         accessToken: jwtService.signAccess(payload),
         refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "30d",
       },
     });
   } catch (err) {
@@ -297,7 +297,7 @@ async function oauth(req, res, next) {
       tokens: {
         accessToken: jwtService.signAccess(payload),
         refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "30d",
       },
     });
   } catch (err) {
@@ -341,7 +341,7 @@ async function refresh(req, res, next) {
       tokens: {
         accessToken: jwtService.signAccess(payload),
         refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "30d",
       },
     });
   } catch (err) {

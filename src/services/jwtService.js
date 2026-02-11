@@ -11,7 +11,7 @@ const ACCESS_SECRET = () => getEnv('JWT_ACCESS_SECRET');
 const REFRESH_SECRET = () => getEnv('JWT_REFRESH_SECRET');
 
 // expiry
-const ACCESS_EXPIRES = () => process.env.ACCESS_TOKEN_EXPIRES_IN || '15m';
+const ACCESS_EXPIRES = () => process.env.ACCESS_TOKEN_EXPIRES_IN || '30d';
 const REFRESH_EXPIRES = () => process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
 
 // payload must contain: id, email, role

@@ -168,7 +168,7 @@ exports.vendorSignupVerify = async (req, res, next) => {
       tokens: {
         accessToken,
         refreshToken,
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN,
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "30d",
       },
     });
   } catch (err) {
@@ -232,7 +232,7 @@ exports.login = async (req, res, next) => {
       tokens: {
         accessToken,
         refreshToken,
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "30d",
       },
     });
   } catch (err) {
@@ -353,7 +353,7 @@ exports.oauth = async (req, res, next) => {
       tokens: {
         accessToken: jwtService.signAccess(payload),
         refreshToken: jwtService.signRefresh(payload),
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "30d",
       },
     });
   } catch (err) {
@@ -400,7 +400,7 @@ exports.refresh = async (req, res, next) => {
       tokens: {
         accessToken,
         refreshToken: newRefreshToken,
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "15m",
+        expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || "30d",
       },
     });
   } catch (err) {
