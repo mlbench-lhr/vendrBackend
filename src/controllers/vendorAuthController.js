@@ -253,9 +253,20 @@ exports.oauth = async (req, res, next) => {
     let providerUserId;
 
     if (provider === "google") {
+      const platform = String(req.body.platform || "").toLowerCase();
+      const ANDROID_ID =
+        process.env.GOOGLE_CLIENT_ID_ANDROID || process.env.GOOGLE_CLIENT_ID;
+      const IOS_ID =
+        process.env.GOOGLE_CLIENT_ID_IOS || process.env.GOOGLE_CLIENT_ID;
+      const audience =
+        platform === "android"
+          ? ANDROID_ID
+          : platform === "ios"
+          ? IOS_ID
+          : [ANDROID_ID, IOS_ID];
       const ticket = await googleClient.verifyIdToken({
         idToken: provider_id,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience,
       });
 
       const googlePayload = ticket.getPayload();
