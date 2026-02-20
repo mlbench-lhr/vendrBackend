@@ -16,9 +16,9 @@ exports.addReview = async (req, res) => {
 
         // Optional: Check if the user has already reviewed this vendor
         const existingReview = await VendorReview.findOne({ vendor_id, user_id: userId });
-        if (existingReview) {
-            return res.status(400).json({ success: false, message: "You have already reviewed this vendor" });
-        }
+        // if (existingReview) {
+        //     return res.status(400).json({ success: false, message: "You have already reviewed this vendor" });
+        // }
 
         const review = new VendorReview({
             vendor_id,

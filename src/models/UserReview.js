@@ -8,6 +8,6 @@ const UserReviewSchema = new mongoose.Schema({
   created_at: { type: Date, default: Date.now }
 });
 
-UserReviewSchema.index({ vendor_id: 1, user_id: 1 }, { unique: true });
+UserReviewSchema.index({ vendor_id: 1, user_id: 1 });
 
 module.exports = mongoose.model("UserReview", UserReviewSchema);

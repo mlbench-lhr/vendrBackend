@@ -27,11 +27,13 @@ exports.addReview = async (req, res) => {
       return res.status(404).json({ success: false, message: "Vendor not found" });
     }
 
-    const review = await UserReview.findOneAndUpdate(
-      { vendor_id: vendorId, user_id: userId },
-      { vendor_id: vendorId, user_id: userId, rating, message: message || "" },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    const review = await UserReview.create({
+      vendor_id: vendorId,
+      user_id: userId,
+      rating,
+      message: message || "",
+      created_at: new Date(),
+    });
 
     return res.json({ success: true, message: "Rating saved", review });
   } catch (err) {
